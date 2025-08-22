@@ -1,12 +1,9 @@
-{% extends "base.html" %}
-{% block title %}Dashboard Financeiro{% endblock %}
-
-{% block content %}
-<div class="pbiX-root" id="pbiX-root-financeiro">
+{# PARCIAL ISOLADA: não altera estilos globais #}
+<div class="pbiX-root" id="pbiX-root-{{ id|default:'main' }}">
   <div class="pbiX-head">
-    <h1 class="pbiX-title">Dashboard Financeiro</h1>
+    <h1 class="pbiX-title">{{ title|default:"Dashboard Financeiro" }}</h1>
     <div class="pbiX-actions">
-      {% if back_url %}<a class="pbiX-btn pbiX-btn--ghost" href="{%url 'dashboard'%}">← Voltar</a>{% endif %}
+      {% if back_url %}<a class="pbiX-btn pbiX-btn--ghost" href="{{ back_url }}">← Voltar</a>{% endif %}
       <button class="pbiX-btn" type="button" data-pbix-fs>⛶ Tela cheia</button>
     </div>
   </div>
@@ -22,7 +19,7 @@
       <iframe
         class="pbiX-frame"
         src="{{ powerbi_url }}"
-        title="Power BI"
+        title="{{ title|default:'Power BI' }}"
         allow="fullscreen; clipboard-write; encrypted-media"
         allowfullscreen
         loading="lazy"
@@ -31,7 +28,7 @@
       {% else %}
       <div class="pbiX-empty">
         <strong>URL do Power BI não configurada.</strong><br/>
-        Informe <code>powerbi_url</code> ao renderizar a view.
+        Informe <code>powerbi_url</code> ao incluir o componente.
       </div>
       {% endif %}
     </div>
@@ -39,7 +36,8 @@
 </div>
 
 <style>
-.pbiX-root{--pbiX-max:1280px;--pbiX-radius:12px;--pbiX-shadow:0 6px 20px rgba(0,0,0,.08)}
+/* ======== pbiX (namespaced) — não vaza pro base ======== */
+.pbiX-root{--pbiX-max:1280px; --pbiX-gap:12px; --pbiX-radius:12px; --pbiX-shadow:0 6px 20px rgba(0,0,0,.08)}
 .pbiX-head{display:flex;align-items:center;gap:12px;justify-content:space-between;max-width:var(--pbiX-max);margin:8px auto 10px;padding:0 8px}
 .pbiX-title{margin:0;font-weight:700;font-size:clamp(1.15rem,2.2vw,1.6rem);color:#223}
 .pbiX-actions{display:flex;gap:8px}
@@ -54,13 +52,18 @@
 .pbiX-muted{color:#6b7280;font-size:.95rem}
 .pbiX-empty{display:grid;place-items:center;min-height:360px;color:#6b7280;padding:24px;text-align:center}
 @keyframes pbiX-spin{to{transform:rotate(360deg)}}
+/* fullscreen nativo: só cresce a área, não mexe no base */
 :fullscreen .pbiX-area{height:100vh}
-@media (max-width:768px){.pbiX-area{height:70vh}}
+@media (max-width:768px){
+  .pbiX-head{padding:0 6px}
+  .pbiX-title{font-size:1.1rem}
+  .pbiX-area{height:70vh}
+}
 </style>
 
 <script>
 (function(){
-  const root  = document.getElementById('pbiX-root-financeiro')
+  const root  = document.currentScript.closest('.pbiX-root') || document.querySelector('.pbiX-root')
   const area  = root.querySelector('[data-pbix-area]')
   const btnFS = root.querySelector('[data-pbix-fs]')
   const frame = root.querySelector('[data-pbix-frame]')
@@ -68,21 +71,27 @@
 
   if(frame){
     frame.addEventListener('load', ()=>{ wait && (wait.style.display='none') })
+    // segurança: se o onload não disparar, some com o loader
     setTimeout(()=>{ wait && (wait.style.display='none') }, 6000)
   }
+
   async function toggleFS(){
     try{
       if(!document.fullscreenElement){
-        await area.requestFullscreen(); btnFS.textContent='↩ Sair'
+        await area.requestFullscreen()
+        btnFS.textContent = '↩ Sair'
       }else{
-        await document.exitFullscreen(); btnFS.textContent='⛶ Tela cheia'
+        await document.exitFullscreen()
+        btnFS.textContent = '⛶ Tela cheia'
       }
     }catch(e){
+      // fallback: se o navegador bloquear, apenas alterna altura ocupando viewport
       area.style.height = area.style.height.includes('100vh') ? '78vh' : '100vh'
     }
   }
   btnFS && btnFS.addEventListener('click', toggleFS)
-  document.addEventListener('fullscreenchange', ()=>{ btnFS.textContent = document.fullscreenElement ? '↩ Sair' : '⛶ Tela cheia' })
+  document.addEventListener('fullscreenchange', ()=>{
+    btnFS.textContent = document.fullscreenElement ? '↩ Sair' : '⛶ Tela cheia'
+  })
 })();
 </script>
-{% endblock %}

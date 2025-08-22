@@ -9,7 +9,9 @@ from .forms import ContaForm
 from django.db.models import Sum, Q
 from django.conf import settings
 from django.http import HttpResponse
-
+import os
+from django.contrib.auth.decorators import login_required
+from decouple import config
 def login_view(request):
     if request.method == 'POST':
         identificador = (request.POST.get('username') or '').strip()  
@@ -43,6 +45,7 @@ def login_view(request):
 
     return render(request, 'login.html')
 
+@login_required
 def dashboard(request):
     """Tela principal com linha do tempo e estatísticas"""
     contas = Conta.objects.all().order_by('-criado_em')
@@ -52,6 +55,7 @@ def dashboard(request):
     }
     return render(request, 'dashboard.html', context)
 
+@login_required
 def cadastrar_conta(request):
     """Cadastrar nova conta"""
     if request.method == 'POST':
@@ -67,6 +71,7 @@ def cadastrar_conta(request):
     
     return render(request, 'cadastrar.html', {'form': form})
 
+@login_required
 def editar_conta(request, pk):
     """Editar conta existente"""
     conta = get_object_or_404(Conta, pk=pk)
@@ -82,8 +87,9 @@ def editar_conta(request, pk):
     else:
         form = ContaForm(instance=conta)
     
-    return render(request, 'contas/editar.html', {'form': form, 'conta': conta})
+    return render(request, 'editar.html', {'form': form, 'conta': conta})
 
+@login_required
 def excluir_conta(request, pk):
     """Excluir conta"""
     conta = get_object_or_404(Conta, pk=pk)
@@ -94,8 +100,9 @@ def excluir_conta(request, pk):
         messages.success(request, f'Conta "{titulo_conta}" excluída com sucesso!')
         return redirect('dashboard')
     
-    return render(request, 'contas/excluir.html', {'conta': conta})
+    return render(request, 'excluir.html', {'conta': conta})
 
+@login_required
 def api_contas_json(request):
     """API JSON para dados das contas (para gráficos)"""
     contas = Conta.objects.all().values('titulo', 'descricao', 'data', 'criado_em')
@@ -111,11 +118,12 @@ def api_contas_json(request):
     
     return JsonResponse({'contas': contas_list})
 
+@login_required
 def powerbi(request):
-    if request.method == "GET":
-        embed_url = getattr(settings, "POWERBI_EMBED_URL",
-            "https://app.powerbi.com/view?r=eyJrIjoiM2JlODRjN2QtYTUwMC00NjIwLTk3MjEtOGFlMmRlMTBmNTExIiwidCI6ImJmODhhNDU2LTQwZTctNDg5OC1hYmMwLWUwNmM0MWVmZTliOCJ9"
-        )
-        return render(request, "powerbi.html", {"embed_url": embed_url})
-
-    return redirect("dashpbix")
+    url = ("https://app.powerbi.com/view?"
+           "r=eyJrIjoiM2JlODRjN2QtYTUwMC00NjIwLTk3MjEtOGFlMmRlMTBmNTExIiwidCI6ImJmODhhNDU2LTQwZTctNDg5OC1hYmMwLWUwNmM0MWVmZTliOCJ9")
+    ctx = {
+        "powerbi_url": url,
+        "back_url": "/",            
+    }
+    return render(request, "powerbi.html", ctx)

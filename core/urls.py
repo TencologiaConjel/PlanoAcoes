@@ -9,5 +9,5 @@ urlpatterns = [
     path('editar/<int:pk>/', views.editar_conta, name='editar_conta'),
     path('excluir/<int:pk>/', views.excluir_conta, name='excluir_conta'),
     path('api/contas/', views.api_contas_json, name='api_contas'),
-    path('powerbi/', views.powerbi, name='powerbi'),
+    path('financeiro/', views.powerbi, name='dashboard_financeiro'),
 ]
