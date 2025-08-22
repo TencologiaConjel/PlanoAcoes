@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Prestação de Contas{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-5">
+        <div class="col-md-4 mb-3">
+            
+        </div>
+     </div>
+ </div>
+
+    
+
+    {% if contas %}
+        <div class="row">
+            <div class="col-12">
+                <h2 class="text-center mb-5 fw-bold text-dark">
+                    <i class="bi bi-clock-history me-2"></i>
+                    Histórico de Ações
+                </h2>
+                
+                <div class="timeline">
+                    {% for conta in contas %}
+                        <div class="timeline-item {% cycle 'left' 'right' %} {{ conta.tipo }}">
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-1 fw-bold">{{ conta.nome }}</h5>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                            <i class="bi bi-three-dots"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item" href="{% url 'editar_conta' conta.pk %}">
+                                                <i class="bi bi-pencil me-2"></i>Editar
+                                            </a></li>
+                                            <li><a class="dropdown-item text-danger" href="{% url 'excluir_conta' conta.pk %}">
+                                                <i class="bi bi-trash me-2"></i>Excluir
+                                            </a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        {% if conta.descricao %}
+                                            <p class="text-muted mb-2">{{ conta.descricao }}</p>
+                                        {% endif %}
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar-event me-1"></i>
+                                            {{ conta.data|date:"d/m/Y" }}
+                                        </small>
+                                    </div>
+                                    
+                                </div>
+                            </div>
+                            <div class="timeline-marker"></div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <div class="glass-card p-5 mx-auto" style="max-width: 500px;">
+                <i class="bi bi-inbox display-1 text-muted mb-3"></i>
+                <h3 class="text-muted">Nenhuma conta cadastrada</h3>
+                <p class="text-muted mb-4">Comece cadastrando sua primeira conta para ver o histórico aqui.</p>
+                <a href="{% url 'cadastrar_conta' %}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle me-2"></i>
+                    Cadastrar Primeira Conta
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.stats-card');
+    cards.forEach((card, index) => {
+        setTimeout(() => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(30px)';
+            card.style.transition = 'all 0.5s ease';
+            
+            setTimeout(() => {
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, 100);
+        }, index * 200);
+    });
+    
+    // Animação para timeline items
+    const timelineItems = document.querySelectorAll('.timeline-item');
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    });
+    
+    timelineItems.forEach(item => {
+        item.style.opacity = '0';
+        item.style.transform = 'translateY(50px)';
+        item.style.transition = 'all 0.6s ease';
+        observer.observe(item);
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

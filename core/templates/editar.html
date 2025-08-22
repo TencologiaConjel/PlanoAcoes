@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Conta - Prestação de Contas{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg border-0" style="border-radius: 20px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
+                <div class="card-header text-center py-4" style="background: linear-gradient(135deg, #F8ED1B 0%, #E6D000 100%); border-radius: 20px 20px 0 0; border: none;">
+                    <h2 class="mb-0 fw-bold" style="color: #293A83;">
+                        <i class="bi bi-pencil-square me-2"></i>
+                        Editar Conta
+                    </h2>
+                    <p class="mb-0 mt-2" style="color: #293A83; opacity: 0.8;">{{ conta.nome }}</p>
+                </div>
+                
+                <div class="card-body p-5">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- Nome da Conta -->
+                        <div class="mb-4">
+                            <label for="{{ form.nome.id_for_label }}" class="form-label fw-bold">
+                                <i class="bi bi-card-text me-2 text-primary"></i>
+                                {{ form.nome.label }}
+                            </label>
+                            {{ form.nome }}
+                            {% if form.nome.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.nome.errors %}
+                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Descrição -->
+                        <div class="mb-4">
+                            <label for="{{ form.descricao.id_for_label }}" class="form-label fw-bold">
+                                <i class="bi bi-chat-text me-2 text-secondary"></i>
+                                {{ form.descricao.label }}
+                            </label>
+                            {{ form.descricao }}
+                            {% if form.descricao.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.descricao.errors %}
+                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Valor e Tipo -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.valor.id_for_label }}" class="form-label fw-bold">
+                                    <i class="bi bi-currency-dollar me-2 text-success"></i>
+                                    {{ form.valor.label }}
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">R$</span>
+                                    {{ form.valor }}
+                                </div>
+                                {% if form.valor.errors %}
+                                    <div class="text-danger small mt-1">
+                                        {% for error in form.valor.errors %}
+                                            <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="{{ form.tipo.id_for_label }}" class="form-label fw-bold">
+                                    <i class="bi bi-arrow-up-down me-2 text-info"></i>
+                                    {{ form.tipo.label }}
+                                </label>
+                                {{ form.tipo }}
+                                {% if form.tipo.errors %}
+                                    <div class="text-danger small mt-1">
+                                        {% for error in form.tipo.errors %}
+                                            <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
+                                <i class="bi bi-calendar-date me-2 text-warning"></i>
+                                {{ form.data.label }}
+                            </label>
+                            {{ form.data }}
+                            {% if form.data.errors %}
+                                <div class="text-danger small mt-1">
+                                    {% for error in form.data.errors %}
+                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="text-center mt-5">
+                            <button type="submit" class="btn btn-primary btn-lg px-5 me-3" style="border-radius: 25px; background: linear-gradient(135deg, #F8ED1B 0%, #E6D000 100%); border: none; color: #293A83;">
+                                <i class="bi bi-check-circle me-2"></i>
+                                Salvar Alterações
+                            </button>
+                            
+                            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-lg px-5" style="border-radius: 25px;">
+                                <i class="bi bi-arrow-left me-2"></i>
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const card = document.querySelector('.card');
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(30px)';
+    card.style.transition = 'all 0.6s ease';
+    
+    setTimeout(() => {
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+    }, 100);
+    
+    const form = document.querySelector('form');
+    const inputs = form.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        input.addEventListener('blur', function() {
+            if (this.value.trim() === '' && this.required) {
+                this.classList.add('is-invalid');
+            } else {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}
