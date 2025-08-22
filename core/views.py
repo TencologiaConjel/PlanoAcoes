@@ -48,7 +48,7 @@ def dashboard(request):
     contas = Conta.objects.all().order_by('-criado_em')
     
     context = {
-        'contas': contas,  # Mudei de 'planos' para 'contas' para ser consistente
+        'contas': contas,  
     }
     return render(request, 'dashboard.html', context)
 
@@ -118,16 +118,4 @@ def powerbi(request):
         )
         return render(request, "powerbi.html", {"embed_url": embed_url})
 
-    # POST (se tiver formulário) → só aqui usa redirect (PRG)
     return redirect("dashpbix")
-
-def create_admin(request):
-    User = get_user_model()
-    username = "admin"
-    password = "123123@123123"
-
-    if not User.objects.filter(username=username).exists():
-        User.objects.create_superuser(username=username, password=password)
-        return HttpResponse("Superusuário criado com sucesso!")
-    else:
-        return HttpResponse("Superusuário já existe.")
