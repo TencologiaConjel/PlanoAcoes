@@ -105,5 +105,5 @@ LOGOUT_REDIRECT_URL = 'login'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://planoacoes-production.up.railway.app/'
+    'https://planoacoes-production.up.railway.app'
 ]
