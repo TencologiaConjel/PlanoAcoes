@@ -12,6 +12,7 @@ from django.http import HttpResponse
 import os
 from django.contrib.auth.decorators import login_required
 from decouple import config
+
 def login_view(request):
     if request.method == 'POST':
         identificador = (request.POST.get('username') or '').strip()  
@@ -83,6 +84,8 @@ def editar_conta(request, pk):
             messages.success(request, f'Conta "{conta.titulo}" atualizada com sucesso!')
             return redirect('dashboard')
         else:
+            # Adicionando debug para ver os erros específicos
+            print("Erros do form:", form.errors)
             messages.error(request, 'Erro ao atualizar conta. Verifique os dados informados.')
     else:
         form = ContaForm(instance=conta)

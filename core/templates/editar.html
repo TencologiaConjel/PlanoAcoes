@@ -12,23 +12,23 @@
                         <i class="bi bi-pencil-square me-2"></i>
                         Editar Conta
                     </h2>
-                    <p class="mb-0 mt-2" style="color: #293A83; opacity: 0.8;">{{ conta.nome }}</p>
+                    <p class="mb-0 mt-2" style="color: #293A83; opacity: 0.8;">{{ conta.titulo }}</p>
                 </div>
                 
                 <div class="card-body p-5">
                     <form method="post" novalidate>
                         {% csrf_token %}
                         
-                        <!-- Nome da Conta -->
+                        <!-- Título da Conta -->
                         <div class="mb-4">
-                            <label for="{{ form.nome.id_for_label }}" class="form-label fw-bold">
+                            <label for="{{ form.titulo.id_for_label }}" class="form-label fw-bold">
                                 <i class="bi bi-card-text me-2 text-primary"></i>
-                                {{ form.nome.label }}
+                                Título da Conta
                             </label>
-                            {{ form.nome }}
-                            {% if form.nome.errors %}
+                            <input type="text" class="form-control form-control-lg" id="{{ form.titulo.id_for_label }}" name="titulo" value="{{ conta.titulo }}" required style="border-radius: 15px; border: 2px solid #e9ecef; padding: 15px;">
+                            {% if form.titulo.errors %}
                                 <div class="text-danger small mt-1">
-                                    {% for error in form.nome.errors %}
+                                    {% for error in form.titulo.errors %}
                                         <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
                                     {% endfor %}
                                 </div>
@@ -39,9 +39,9 @@
                         <div class="mb-4">
                             <label for="{{ form.descricao.id_for_label }}" class="form-label fw-bold">
                                 <i class="bi bi-chat-text me-2 text-secondary"></i>
-                                {{ form.descricao.label }}
+                                Descrição
                             </label>
-                            {{ form.descricao }}
+                            <textarea class="form-control form-control-lg" id="{{ form.descricao.id_for_label }}" name="descricao" rows="4" style="border-radius: 15px; border: 2px solid #e9ecef; padding: 15px;">{{ conta.descricao }}</textarea>
                             {% if form.descricao.errors %}
                                 <div class="text-danger small mt-1">
                                     {% for error in form.descricao.errors %}
@@ -51,42 +51,7 @@
                             {% endif %}
                         </div>
 
-                        <!-- Valor e Tipo -->
-                        <div class="row mb-4">
-                            <div class="col-md-6">
-                                <label for="{{ form.valor.id_for_label }}" class="form-label fw-bold">
-                                    <i class="bi bi-currency-dollar me-2 text-success"></i>
-                                    {{ form.valor.label }}
-                                </label>
-                                <div class="input-group">
-                                    <span class="input-group-text">R$</span>
-                                    {{ form.valor }}
-                                </div>
-                                {% if form.valor.errors %}
-                                    <div class="text-danger small mt-1">
-                                        {% for error in form.valor.errors %}
-                                            <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <label for="{{ form.tipo.id_for_label }}" class="form-label fw-bold">
-                                    <i class="bi bi-arrow-up-down me-2 text-info"></i>
-                                    {{ form.tipo.label }}
-                                </label>
-                                {{ form.tipo }}
-                                {% if form.tipo.errors %}
-                                    <div class="text-danger small mt-1">
-                                        {% for error in form.tipo.errors %}
-                                            <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-                        </div>
-
+                        <!-- Data -->
                         <div class="mb-4">
                             <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
                                 <i class="bi bi-calendar-date me-2 text-warning"></i>
