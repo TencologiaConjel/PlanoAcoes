@@ -24,7 +24,7 @@
                             <div class="col-md-8 text-start">
                                 <h5 class="fw-bold mb-1">{{ conta.nome }}</h5>
                                 {% if conta.descricao %}
-                                    <p class="text-muted small mb-1">{{ conta.descricao }}</p>
+                                    <p class="text-muted small mb-1">{{ conta.descricao|safe }}</p>
                                 {% endif %}
                                 <small class="text-muted">
                                     <i class="bi bi-calendar-event me-1"></i>

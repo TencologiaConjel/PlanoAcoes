@@ -49,8 +49,7 @@ def login_view(request):
 @login_required
 def dashboard(request):
     """Tela principal com linha do tempo e estatísticas"""
-    contas = Conta.objects.all().order_by('-criado_em')
-    
+    contas = Conta.objects.all().order_by('-data') 
     context = {
         'contas': contas,  
     }

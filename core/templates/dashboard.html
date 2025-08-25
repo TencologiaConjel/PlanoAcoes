@@ -29,7 +29,7 @@
 /* Lista gerada do .js-desc */
 .timeline-list{
   margin:0;
-  padding-left: 1.2rem;   /* para bullets "inside" ficarem alinhados */
+  padding-left: 1.2rem; /* bullets "inside" alinhados */
   list-style: disc inside;
 }
 .timeline-list li{
@@ -86,7 +86,8 @@
               </div>
 
               {% if conta.descricao %}
-                <p class="text-muted mb-2 js-desc">{{ conta.descricao }}</p>
+                <!-- Com safe para respeitar HTML do editor -->
+                <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
               {% endif %}
 
               <small class="text-muted">
@@ -116,7 +117,7 @@
               </div>
 
               {% if conta.descricao %}
-                <p class="text-muted mb-2 js-desc">{{ conta.descricao }}</p>
+                <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
               {% endif %}
 
               <small class="text-muted">
@@ -133,24 +134,51 @@
 {% block scripts %}
 <script>
 /**
- * Converte <p.js-desc> em <ul.timeline-list><li>...</li></ul>
- * Aceita: quebras de linha, ponto final, ponto-e-vírgula, bullets (• - — – *).
- * Realça datas no início (ex: "12/05/2024", "12 de Maio de 2024").
+ * .js-desc -> mantém listas existentes ou converte texto em bullets.
+ * - Se houver <ul>/<ol> no HTML vindo do editor, apenas estiliza.
+ * - Caso contrário, divide por quebras de linha, ; . e bullets comuns e gera <ul>.
+ * - Converte <br> e <p> em novas linhas antes da tokenização.
+ * - Realça datas no início do item.
  */
 document.addEventListener('DOMContentLoaded', function () {
   const descs = document.querySelectorAll('.js-desc');
   const dateRegex = /^(?:\d{1,2}\/\d{1,2}\/\d{2,4}|(?:\d{1,2}\s+de\s+[A-Za-zÀ-ÿ]+(?:\s+de)?\s+\d{4}))/i;
 
-  descs.forEach(p => {
-    const raw = (p.textContent || '').trim();
-    if (!raw) return;
+  descs.forEach(wrapper => {
+    // 1) Se já veio com UL/OL do editor, reaproveita
+    const existingList = wrapper.querySelector('ul, ol');
+    if (existingList) {
+      const ul = document.createElement('ul');
+      ul.className = 'timeline-list';
+      ul.setAttribute('role', 'list');
 
-    // Normaliza espaços e separa itens
-    const normalized = raw.replace(/\s+/g, ' ');
+      existingList.querySelectorAll('li').forEach(li0 => {
+        const li = document.createElement('li');
+        li.innerHTML = li0.innerHTML; // mantém formatação rica do item
+        ul.appendChild(li);
+      });
+
+      wrapper.replaceWith(ul);
+      return;
+    }
+
+    // 2) Não tem lista: gerar a partir do texto
+    const html = wrapper.innerHTML
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>\s*<p>/gi, '\n');
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const rawText = (temp.textContent || temp.innerText || '').trim();
+    if (!rawText) { wrapper.remove(); return; }
+
+    const normalized = rawText.replace(/[ \t]+/g, ' ');
     let parts = normalized
       .split(/\s*(?:\n+|[.;]|[•\-—–]|\*\s*)\s*/g)
       .map(s => s.trim())
       .filter(Boolean);
+
+    // Frase única: deixa como está
+    if (parts.length <= 1) return;
 
     const ul = document.createElement('ul');
     ul.className = 'timeline-list';
@@ -158,8 +186,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     parts.forEach(item => {
       const li = document.createElement('li');
-
       const m = item.match(dateRegex);
+
       if (m) {
         const dateSpan = document.createElement('strong');
         dateSpan.className = 'date';
@@ -174,26 +202,22 @@ document.addEventListener('DOMContentLoaded', function () {
       ul.appendChild(li);
     });
 
-    p.replaceWith(ul);
+    wrapper.replaceWith(ul);
   });
 });
 </script>
 
 <script>
 /**
- * Anima cards (.stats-card) em cascata e revela linhas da timeline ao entrar na viewport.
- * Corrige os seletores para usar .timeline-row (em vez de .timeline-item).
+ * Anima cards (.stats-card) em cascata e revela as linhas da timeline.
  */
 document.addEventListener('DOMContentLoaded', function() {
   // Animação de stats-cards (se existirem na página)
   const cards = document.querySelectorAll('.stats-card');
   cards.forEach((card, index) => {
-    // estado inicial
     card.style.opacity = '0';
     card.style.transform = 'translateY(30px)';
     card.style.transition = 'all 0.5s ease';
-
-    // entrada em cascata
     setTimeout(() => {
       requestAnimationFrame(() => {
         card.style.opacity = '1';
@@ -208,7 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         entry.target.classList.add('is-visible');
-        observer.unobserve(entry.target); // revela uma vez
+        observer.unobserve(entry.target); 
       }
     });
   }, { threshold: 0.2 });

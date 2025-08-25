@@ -35,13 +35,13 @@
                             {% endif %}
                         </div>
 
-                        <!-- Descrição -->
+                        <!-- Descrição (TinyMCE) -->
                         <div class="mb-4">
                             <label for="{{ form.descricao.id_for_label }}" class="form-label fw-bold">
                                 <i class="bi bi-chat-text me-2 text-secondary"></i>
                                 Descrição
                             </label>
-                            <textarea class="form-control form-control-lg" id="{{ form.descricao.id_for_label }}" name="descricao" rows="4" style="border-radius: 15px; border: 2px solid #e9ecef; padding: 15px;">{{ conta.descricao }}</textarea>
+                            <textarea class="form-control form-control-lg" id="id_descricao" name="descricao" rows="6" style="border-radius: 15px; border: 2px solid #e9ecef; padding: 15px;">{{ conta.descricao|safe }}</textarea>
                             {% if form.descricao.errors %}
                                 <div class="text-danger small mt-1">
                                     {% for error in form.descricao.errors %}
@@ -49,22 +49,33 @@
                                     {% endfor %}
                                 </div>
                             {% endif %}
+                            <div class="form-text">Você pode formatar: <strong>negrito</strong>, <em>itálico</em>, listas, cores, tamanho e fonte.</div>
                         </div>
 
-                        <!-- Data -->
+                       <!-- Data -->
                         <div class="mb-4">
-                            <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
-                                <i class="bi bi-calendar-date me-2 text-warning"></i>
-                                {{ form.data.label }}
-                            </label>
-                            {{ form.data }}
-                            {% if form.data.errors %}
-                                <div class="text-danger small mt-1">
-                                    {% for error in form.data.errors %}
-                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
+                        <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
+                            <i class="bi bi-calendar-date me-2 text-warning"></i>
+                            {{ form.data.label }}
+                        </label>
+
+                        <input
+                            type="date"
+                            class="form-control form-control-lg"
+                            id="{{ form.data.id_for_label }}"
+                            name="data"
+                            value="{{ conta.data|date:'Y-m-d' }}"
+                            required
+                            style="border-radius: 15px; border: 2px solid #e9ecef; padding: 15px;"
+                        />
+
+                        {% if form.data.errors %}
+                            <div class="text-danger small mt-1">
+                            {% for error in form.data.errors %}
+                                <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                            {% endfor %}
+                            </div>
+                        {% endif %}
                         </div>
 
                         <div class="text-center mt-5">
@@ -86,30 +97,37 @@
 </div>
 
 {% block scripts %}
+<!-- TinyMCE CDN (use sua API key se tiver, ou troque para estático se preferir) -->
+<script src="https://cdn.tiny.cloud/1/sezt9icuj1hnklywucfvbqalthsdthcyns2uk6ei4ha4wqyc/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Animação do card
     const card = document.querySelector('.card');
     card.style.opacity = '0';
     card.style.transform = 'translateY(30px)';
     card.style.transition = 'all 0.6s ease';
-    
     setTimeout(() => {
         card.style.opacity = '1';
         card.style.transform = 'translateY(0)';
     }, 100);
-    
-    const form = document.querySelector('form');
-    const inputs = form.querySelectorAll('input, select, textarea');
-    
-    inputs.forEach(input => {
-        input.addEventListener('blur', function() {
-            if (this.value.trim() === '' && this.required) {
-                this.classList.add('is-invalid');
-            } else {
-                this.classList.remove('is-invalid');
-                this.classList.add('is-valid');
-            }
-        });
+
+    // TinyMCE init
+    tinymce.init({
+        selector: '#id_descricao',
+        height: 320,
+        menubar: false,
+        plugins: 'advlist autolink lists link table code charmap quickbars',
+        toolbar: [
+            'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor',
+            '| alignleft aligncenter alignright alignjustify | bullist numlist outdent indent',
+            '| link table charmap | removeformat | code'
+        ].join(' '),
+        quickbars_selection_toolbar: 'bold italic underline | forecolor backcolor | bullist numlist | link',
+        font_family_formats: 'Inter=Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; Arial=arial,helvetica,sans-serif; Georgia=georgia,serif; Courier New=courier new,courier,monospace',
+        fontsize_formats: '12px 14px 16px 18px 20px 24px 28px 32px',
+        branding: false,
+        content_style: "body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif; font-size: 14px; }"
     });
 });
 </script>
