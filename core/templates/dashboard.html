@@ -8,7 +8,6 @@
 </h2>
 
 <style>
-/* ===== Timeline ===== */
 .timeline { position: relative; }
 .timeline-line{
   position:absolute; inset:0 auto 0 50%;
@@ -26,10 +25,9 @@
   z-index:2;
 }
 
-/* Lista gerada do .js-desc */
 .timeline-list{
   margin:0;
-  padding-left: 1.2rem; /* bullets "inside" alinhados */
+  padding-left: 1.2rem; 
   list-style: disc inside;
 }
 .timeline-list li{
@@ -39,8 +37,6 @@
 .timeline-list .date{
   font-weight: 700;
 }
-
-/* Animações (entrada suave) */
 .timeline-row{
   opacity:0; transform: translateY(40px);
   transition: opacity .6s ease, transform .6s ease;
@@ -49,12 +45,10 @@
   opacity:1; transform: translateY(0);
 }
 
-/* Responsivo: remove linha/dot no mobile para evitar sobreposição */
 @media (max-width: 767.98px){
   .timeline-line, .timeline-dot{ display:none; }
 }
 
-/* Acessibilidade de foco para itens clicáveis no card */
 .card .dropdown-toggle:focus{
   outline: 2px solid #1f4aa8; outline-offset: 2px;
 }
@@ -68,7 +62,6 @@
       <span class="timeline-dot" aria-hidden="true"></span>
 
       {% if forloop.counter0|divisibleby:2 %}
-        <!-- ÍMPAR: card à esquerda -->
         <div class="col-md-6">
           <div class="card h-100 shadow-sm">
             <div class="card-body">
@@ -86,7 +79,6 @@
               </div>
 
               {% if conta.descricao %}
-                <!-- Com safe para respeitar HTML do editor -->
                 <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
               {% endif %}
 
@@ -98,7 +90,6 @@
         </div>
         <div class="col-md-6 d-none d-md-block"></div>
       {% else %}
-        <!-- PAR: card à direita -->
         <div class="col-md-6 d-none d-md-block"></div>
         <div class="col-md-6">
           <div class="card h-100 shadow-sm">
@@ -133,19 +124,11 @@
 
 {% block scripts %}
 <script>
-/**
- * .js-desc -> mantém listas existentes ou converte texto em bullets.
- * - Se houver <ul>/<ol> no HTML vindo do editor, apenas estiliza.
- * - Caso contrário, divide por quebras de linha, ; . e bullets comuns e gera <ul>.
- * - Converte <br> e <p> em novas linhas antes da tokenização.
- * - Realça datas no início do item.
- */
 document.addEventListener('DOMContentLoaded', function () {
   const descs = document.querySelectorAll('.js-desc');
   const dateRegex = /^(?:\d{1,2}\/\d{1,2}\/\d{2,4}|(?:\d{1,2}\s+de\s+[A-Za-zÀ-ÿ]+(?:\s+de)?\s+\d{4}))/i;
 
   descs.forEach(wrapper => {
-    // 1) Se já veio com UL/OL do editor, reaproveita
     const existingList = wrapper.querySelector('ul, ol');
     if (existingList) {
       const ul = document.createElement('ul');
@@ -154,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       existingList.querySelectorAll('li').forEach(li0 => {
         const li = document.createElement('li');
-        li.innerHTML = li0.innerHTML; // mantém formatação rica do item
+        li.innerHTML = li0.innerHTML; 
         ul.appendChild(li);
       });
 
@@ -162,7 +145,6 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    // 2) Não tem lista: gerar a partir do texto
     const html = wrapper.innerHTML
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/p>\s*<p>/gi, '\n');
@@ -177,7 +159,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .map(s => s.trim())
       .filter(Boolean);
 
-    // Frase única: deixa como está
     if (parts.length <= 1) return;
 
     const ul = document.createElement('ul');
@@ -208,11 +189,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 <script>
-/**
- * Anima cards (.stats-card) em cascata e revela as linhas da timeline.
- */
 document.addEventListener('DOMContentLoaded', function() {
-  // Animação de stats-cards (se existirem na página)
   const cards = document.querySelectorAll('.stats-card');
   cards.forEach((card, index) => {
     card.style.opacity = '0';
@@ -226,7 +203,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }, index * 200);
   });
 
-  // Revela as linhas da timeline
+  
   const rows = document.querySelectorAll('.timeline-row');
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {

@@ -83,7 +83,6 @@ def editar_conta(request, pk):
             messages.success(request, f'Conta "{conta.titulo}" atualizada com sucesso!')
             return redirect('dashboard')
         else:
-            # Adicionando debug para ver os erros específicos
             print("Erros do form:", form.errors)
             messages.error(request, 'Erro ao atualizar conta. Verifique os dados informados.')
     else:
@@ -106,7 +105,6 @@ def excluir_conta(request, pk):
 
 @login_required
 def api_contas_json(request):
-    """API JSON para dados das contas (para gráficos)"""
     contas = Conta.objects.all().values('titulo', 'descricao', 'data', 'criado_em')
     contas_list = []
     

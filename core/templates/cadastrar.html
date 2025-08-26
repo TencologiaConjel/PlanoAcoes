@@ -18,7 +18,6 @@
                     <form method="post" novalidate>
                         {% csrf_token %}
                         
-                        <!-- Título da Conta -->
                         <div class="mb-4">
                             <label for="{{ form.titulo.id_for_label }}" class="form-label fw-bold">
                                 <i class="bi bi-card-text me-2" style="color: #2F61AA;"></i>
@@ -34,7 +33,6 @@
                             {% endif %}
                         </div>
 
-                        <!-- Descrição (TinyMCE) -->
                         <div class="mb-4">
                             <label class="form-label fw-bold">
                                 <i class="bi bi-chat-text me-2" style="color: #293A83;"></i>
@@ -50,8 +48,6 @@
                             {% endif %}
                             <div class="form-text">Você pode formatar: <strong>negrito</strong>, <em>itálico</em>, listas, cores, tamanho e fonte.</div>
                         </div>
-
-                        <!-- Data -->
                         <div class="mb-4">
                             <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
                                 <i class="bi bi-calendar-date me-2" style="color: #F8ED1B;"></i>
@@ -66,8 +62,6 @@
                                 </div>
                             {% endif %}
                         </div>
-
-                        <!-- Botões -->
                         <div class="text-center mt-5">
                             <button type="submit" class="btn btn-primary btn-lg px-5 me-3" style="border-radius: 25px; background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%); border: none;">
                                 <i class="bi bi-check-circle me-2"></i>
@@ -88,23 +82,19 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- TinyMCE CDN -->
+
 <script src="https://cdn.tiny.cloud/1/sezt9icuj1hnklywucfvbqalthsdthcyns2uk6ei4ha4wqyc/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
 
 <script>
-/* --- Ajusta atributos do campo descrição e inicializa TinyMCE --- */
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Se existir um campo chamado 'descricao', garanta atributos para Bootstrap e TinyMCE
     const desc = document.querySelector('textarea[name="descricao"]');
     if (desc) {
-        // Define id consistente (Django geralmente já usa id_descricao, mas garantimos)
         if (!desc.id) desc.id = 'id_descricao';
-        // Garante aparência Bootstrap e altura inicial
         desc.classList.add('form-control');
         if (!desc.getAttribute('rows')) desc.setAttribute('rows', '8');
     }
 
-    // Inicia animação do cartão
     const card = document.querySelector('.card');
     if (card) {
         card.style.opacity = '0';
@@ -116,14 +106,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 100);
     }
 
-    // Força classes Bootstrap nos outros campos, caso o form não traga por padrão
     document.querySelectorAll('input, select, textarea').forEach(el => {
         if (!el.classList.contains('form-control') && el.type !== 'submit' && !el.classList.contains('btn')) {
             el.classList.add('form-control');
         }
     });
 
-    // Validação em tempo real (campos nativos)
     const form = document.querySelector('form');
     const rawInputs = form.querySelectorAll('input:not([type="submit"]):not([type="button"]), select, textarea:not([name="descricao"])');
     rawInputs.forEach(input => {
@@ -140,7 +128,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Inicializa TinyMCE no campo descrição
     tinymce.init({
         selector: 'textarea[name="descricao"]',
         height: 320,
@@ -169,7 +156,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Submit com sincronização do TinyMCE
     form.addEventListener('submit', function(e) {
         if (tinymce?.triggerSave) tinymce.triggerSave();
 
