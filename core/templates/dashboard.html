@@ -51,7 +51,7 @@
 }
 
 .timeline-date{
-  width: 7%;
+  width: 6%;
   position:absolute; top:50%;
   font-size:.9rem; font-weight:600; color:#1f4aa8;
   background:#fff; border:1px solid #dbe2f7;
@@ -78,10 +78,10 @@
 
   {% for conta in contas %}
     <div class="row g-4 align-items-stretch timeline-row position-relative" data-index="{{ forloop.counter0 }}">
-      <span class="timeline-dot" aria-hidden="true"></span>
+      <span class="timeline-dot p-2" aria-hidden="true"></span>
 
       {% if forloop.counter0|divisibleby:2 %}
-        <span class="timeline-date to-right">{{ conta.data|date:"d/m/Y" }}</span>
+        <span class="timeline-date to-right ">{{ conta.data|date:"d/m/Y" }}</span>
       {% else %}
         <span class="timeline-date to-left">{{ conta.data|date:"d/m/Y" }}</span>
       {% endif %}

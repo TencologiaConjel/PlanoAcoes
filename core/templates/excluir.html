@@ -3,78 +3,77 @@
 {% block title %}Excluir Conta - Prestação de Contas{% endblock %}
 
 {% block content %}
+
 <div class="container">
-    <div class="row justify-content-center">
-        <div class="col-lg-6">
-            <div class="card shadow-lg border-0" style="border-radius: 20px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
-                <div class="card-header text-center py-4" style="background: linear-gradient(135deg, #E74C3C 0%, #C0392B 100%); border-radius: 20px 20px 0 0; border: none;">
-                    <i class="bi bi-exclamation-triangle-fill display-4 text-white mb-3"></i>
-                    <h2 class="text-white mb-0 fw-bold">Confirmar Exclusão</h2>
-                </div>
-                
-                <div class="card-body p-5 text-center">
-                    <div class="mb-4">
-                        <h4 class="text-dark mb-3">Tem certeza que deseja excluir esta conta?</h4>
-                        <p class="text-muted">Esta ação não pode ser desfeita.</p>
-                    </div>
-                    
-                    <!-- Detalhes da conta -->
-                    <div class="alert alert-light border" style="border-radius: 15px;">
-                        <div class="row align-items-center">
-                            <div class="col-md-8 text-start">
-                                <h5 class="fw-bold mb-1">{{ conta.nome }}</h5>
-                                {% if conta.descricao %}
-                                    <p class="text-muted small mb-1">{{ conta.descricao|safe }}</p>
-                                {% endif %}
-                                <small class="text-muted">
-                                    <i class="bi bi-calendar-event me-1"></i>
-                                    {{ conta.data|date:"d/m/Y" }}
-                                </small>
-                            </div>
-                            
-                        </div>
-                    </div>
-                    
-                    <form method="post" class="mt-4 d-flex">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger btn-lg px-5 me-3" style="border-radius: 25px;">
-                            <i class="bi bi-trash me-2"></i>
-                            Excluir
-                        </button>
-                        
-                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-lg px-5" style="border-radius: 25px;">
-                            <i class="bi bi-arrow-left me-2"></i>
-                            Cancelar
-                        </a>
-                    </form>
-                </div>
-            </div>
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-lg border-0" style="border-radius: 20px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
+        <div class="card-header text-center py-4" style="background: linear-gradient(135deg, #E74C3C 0%, #C0392B 100%); border-radius: 20px 20px 0 0; border: none;">
+          <i class="bi bi-exclamation-triangle-fill display-4 text-white mb-3"></i>
+          <h2 class="text-white mb-0 fw-bold">Confirmar Exclusão</h2>
         </div>
+
+        <div class="card-body p-5 text-center">
+          <div class="mb-4">
+            <h4 class="text-dark mb-3">Tem certeza que deseja excluir esta conta?</h4>
+            <p class="text-muted">Esta ação não pode ser desfeita.</p>
+          </div>
+
+          <div class="alert alert-light border" style="border-radius: 15px;">
+            <div class="row align-items-center">
+              <div class="col-md-12 text-start">
+                <h5 class="fw-bold mb-1">{{ conta.titulo }}</h5>
+                {% if conta.descricao %}
+                  <p class="text-muted small mb-1">{{ conta.descricao|safe }}</p>
+                {% endif %}
+                <small class="text-muted">
+                  <i class="bi bi-calendar-event me-1"></i>
+                  {{ conta.data|date:"d/m/Y" }}
+                </small>
+              </div>
+            </div>
+          </div>
+
+          {# CENTRALIZADO + responsivo: empilha no mobile, lado a lado no desktop #}
+          <form method="post" class="mt-4 d-flex justify-content-center align-items-center gap-3 flex-column flex-sm-row">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-lg px-5 w-100 w-sm-auto" style="border-radius: 25px;">
+              <i class="bi bi-trash me-2"></i>
+              Excluir
+            </button>
+
+            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-lg px-5 w-100 w-sm-auto" style="border-radius: 25px;">
+              <i class="bi bi-arrow-left me-2"></i>
+              Cancelar
+            </a>
+          </form>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const card = document.querySelector('.card');
-    card.style.opacity = '0';
-    card.style.transform = 'scale(0.9) translateY(30px)';
-    card.style.transition = 'all 0.6s ease';
-    
-    setTimeout(() => {
-        card.style.opacity = '1';
-        card.style.transform = 'scale(1) translateY(0)';
-    }, 100);
-    
-    const deleteButton = document.querySelector('button[type="submit"]');
-    deleteButton.addEventListener('click', function(e) {
-        e.preventDefault();
-        
-        const confirmation = confirm('Esta ação é irreversível. Confirma a exclusão da conta "{{ conta.nome }}"?');
-        if (confirmation) {
-            this.form.submit();
-        }
-    });
+  const card = document.querySelector('.card');
+  card.style.opacity = '0';
+  card.style.transform = 'scale(0.9) translateY(30px)';
+  card.style.transition = 'all 0.6s ease';
+
+  setTimeout(() => {
+    card.style.opacity = '1';
+    card.style.transform = 'scale(1) translateY(0)';
+  }, 100);
+
+  const deleteButton = document.querySelector('button[type="submit"]');
+  deleteButton.addEventListener('click', function(e) {
+    e.preventDefault();
+    const confirmation = confirm('Esta ação é irreversível. Confirma a exclusão da conta "{{ conta.titulo }}"?');
+    if (confirmation) {
+      this.form.submit();
+    }
+  });
 });
 </script>
 {% endblock %}
