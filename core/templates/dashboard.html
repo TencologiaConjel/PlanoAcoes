@@ -33,6 +33,7 @@
 </div>  {# fecha o cabeçalho #}
 
 <style>
+/* ===== Timeline ===== */
 .timeline { position: relative; }
 .timeline-line{
   position:absolute; inset:0 auto 0 50%;
@@ -71,6 +72,30 @@
   .timeline-line, .timeline-dot, .timeline-date{ display:none; }
 }
 .card .dropdown-toggle:focus{ outline: 2px solid #1f4aa8; outline-offset: 2px; }
+
+/* ===== Attachments (Anexos) ===== */
+.attachments { margin-top:.5rem; }
+.attachments-header {
+  display:flex; align-items:center; gap:.5rem; font-weight:600;
+  color:#1f4aa8; margin-bottom:.35rem;
+}
+.attachments-grid { display:flex; flex-wrap:wrap; gap:.5rem; }
+.attachment-pill {
+  display:flex; align-items:center; gap:.5rem;
+  border:1px solid #dbe2f7; border-radius:999px;
+  padding:.35rem .6rem; background:#fff; text-decoration:none;
+}
+.attachment-pill:hover { background:#f7f9ff; }
+.attachment-thumb {
+  width:36px; height:36px; border-radius:8px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid #eef2ff; font-size:1.1rem;
+}
+.attachment-meta { font-size:.8rem; color:#6c757d; }
+.badge-count {
+  background:#1f4aa8; color:#fff; border-radius:999px;
+  padding:.1rem .45rem; font-size:.75rem;
+}
 </style>
 
 <div class="timeline position-relative">
@@ -107,7 +132,47 @@
                 <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
               {% endif %}
 
-              <small class="text-muted">
+              {# ===== ANEXOS (lado esquerdo) ===== #}
+              {% with n=conta.anexos.count %}
+                {% if n %}
+                  <div class="attachments">
+                    <div class="attachments-header">
+                      <i class="bi bi-paperclip" aria-hidden="true"></i>
+                      Anexos
+                      {% if n > 1 %}
+                        <span class="badge-count" aria-label="{{ n }} anexos">{{ n }}</span>
+                      {% endif %}
+                    </div>
+
+                    <div class="attachments-grid">
+                      {% for an in conta.anexos.all %}
+                        {% with nome=an.nome_original|default:an.filename ct=an.content_type|default_if_none:"" %}
+                        <a href="{% url 'baixar_anexo' an.pk %}" class="attachment-pill" target="_blank" rel="noopener noreferrer">
+                          <span class="attachment-thumb">
+                            {% if ct and ct|slice:":6" == "image/" %}
+                              <i class="bi bi-file-image" aria-hidden="true"></i>
+                            {% elif ct == "application/pdf" %}
+                              <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
+                            {% else %}
+                              <i class="bi bi-file-earmark" aria-hidden="true"></i>
+                            {% endif %}
+                          </span>
+                          <span>
+                            <div class="fw-semibold text-truncate" style="max-width:220px">{{ nome }}</div>
+                            <div class="attachment-meta">
+                              {% if an.tamanho %}{{ an.tamanho|filesizeformat }} · {% endif %}
+                              {{ an.criado_em|date:"d/m/Y H:i" }}
+                            </div>
+                          </span>
+                        </a>
+                        {% endwith %}
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endif %}
+              {% endwith %}
+
+              <small class="text-muted d-block mt-2">
                 <i class="bi bi-building me-1" aria-hidden="true"></i>{{ conta.base.nome|default:"(sem base)" }}
                 &middot;
                 <i class="bi bi-calendar-event ms-2 me-1" aria-hidden="true"></i>{{ conta.data|date:"d/m/Y" }}
@@ -138,7 +203,47 @@
                 <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
               {% endif %}
 
-              <small class="text-muted">
+              {# ===== ANEXOS (lado direito) ===== #}
+              {% with n=conta.anexos.count %}
+                {% if n %}
+                  <div class="attachments">
+                    <div class="attachments-header">
+                      <i class="bi bi-paperclip" aria-hidden="true"></i>
+                      Anexos
+                      {% if n > 1 %}
+                        <span class="badge-count" aria-label="{{ n }} anexos">{{ n }}</span>
+                      {% endif %}
+                    </div>
+
+                    <div class="attachments-grid">
+                      {% for an in conta.anexos.all %}
+                        {% with nome=an.nome_original|default:an.filename ct=an.content_type|default_if_none:"" %}
+                        <a href="{% url 'baixar_anexo' an.pk %}" class="attachment-pill">
+                          <span class="attachment-thumb">
+                            {% if ct and ct|slice:":6" == "image/" %}
+                              <i class="bi bi-file-image" aria-hidden="true"></i>
+                            {% elif ct == "application/pdf" %}
+                              <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
+                            {% else %}
+                              <i class="bi bi-file-earmark" aria-hidden="true"></i>
+                            {% endif %}
+                          </span>
+                          <span>
+                            <div class="fw-semibold text-truncate" style="max-width:220px">{{ nome }}</div>
+                            <div class="attachment-meta">
+                              {% if an.tamanho %}{{ an.tamanho|filesizeformat }} · {% endif %}
+                              {{ an.criado_em|date:"d/m/Y H:i" }}
+                            </div>
+                          </span>
+                        </a>
+                        {% endwith %}
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endif %}
+              {% endwith %}
+
+              <small class="text-muted d-block mt-2">
                 <i class="bi bi-building me-1" aria-hidden="true"></i>{{ conta.base.nome|default:"(sem base)" }}
                 &middot;
                 <i class="bi bi-calendar-event ms-2 me-1" aria-hidden="true"></i>{{ conta.data|date:"d/m/Y" }}

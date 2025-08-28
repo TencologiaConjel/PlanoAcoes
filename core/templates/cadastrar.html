@@ -4,197 +4,322 @@
 
 {% block content %}
 <div class="container">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow-lg border-0" style="border-radius: 20px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
-                <div class="card-header text-center py-4" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%); border-radius: 20px 20px 0 0; border: none;">
-                    <h2 class="text-white mb-0 fw-bold">
-                        <i class="bi bi-plus-circle-fill me-2"></i>
-                        Cadastrar Nova Conta
-                    </h2>
-                </div>
-                
-                <div class="card-body p-5">
-                    <form method="post" novalidate>
-                        {% csrf_token %}
-                        
-                        <div class="mb-4">
-                            <label for="{{ form.titulo.id_for_label }}" class="form-label fw-bold">
-                                <i class="bi bi-card-text me-2" style="color: #2F61AA;"></i>
-                                {{ form.titulo.label }}
-                            </label>
-                            {{ form.titulo }}
-                            {% if form.titulo.errors %}
-                                <div class="text-danger small mt-1">
-                                    {% for error in form.titulo.errors %}
-                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
-
-                        <div class="mb-4">
-                            <label class="form-label fw-bold">
-                                <i class="bi bi-chat-text me-2" style="color: #293A83;"></i>
-                                {{ form.descricao.label }}
-                            </label>
-                            {{ form.descricao }}  {# sem as_widget(attrs=...) para evitar TemplateSyntaxError #}
-                            {% if form.descricao.errors %}
-                                <div class="text-danger small mt-1">
-                                    {% for error in form.descricao.errors %}
-                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <div class="form-text">Você pode formatar: <strong>negrito</strong>, <em>itálico</em>, listas, cores, tamanho e fonte.</div>
-                        </div>
-                        <div class="mb-4">
-                            <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
-                                <i class="bi bi-calendar-date me-2" style="color: #F8ED1B;"></i>
-                                {{ form.data.label }}
-                            </label>
-                            {{ form.data }}
-                            {% if form.data.errors %}
-                                <div class="text-danger small mt-1">
-                                    {% for error in form.data.errors %}
-                                        <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
-                        <div class="text-center mt-5">
-                            <button type="submit" class="btn btn-primary btn-lg px-5 me-3" style="border-radius: 25px; background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%); border: none;">
-                                <i class="bi bi-check-circle me-2"></i>
-                                Cadastrar Conta
-                            </button>
-                            
-                            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-lg px-5" style="border-radius: 25px;">
-                                <i class="bi bi-arrow-left me-2"></i>
-                                Voltar
-                            </a>
-                        </div>
-                    </form>
-                </div>
-            </div>
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-lg border-0" style="border-radius: 20px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
+        <div class="card-header text-center py-4" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%); border-radius: 20px 20px 0 0; border: none;">
+          <h2 class="text-white mb-0 fw-bold">
+            <i class="bi bi-plus-circle-fill me-2"></i>
+            Cadastrar Nova Conta
+          </h2>
         </div>
+
+        <div class="card-body p-5">
+          {# IMPORTANTE: enctype para upload #}
+          <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            <div class="mb-4">
+              <label for="{{ form.titulo.id_for_label }}" class="form-label fw-bold">
+                <i class="bi bi-card-text me-2" style="color: #2F61AA;"></i>
+                {{ form.titulo.label }}
+              </label>
+              {{ form.titulo }}
+              {% if form.titulo.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.titulo.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-chat-text me-2" style="color: #293A83;"></i>
+                {{ form.descricao.label }}
+              </label>
+              {{ form.descricao }}
+              {% if form.descricao.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.descricao.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              <div class="form-text">Você pode formatar: <strong>negrito</strong>, <em>itálico</em>, listas, cores, tamanho e fonte.</div>
+            </div>
+
+            <div class="mb-4">
+              <label for="{{ form.data.id_for_label }}" class="form-label fw-bold">
+                <i class="bi bi-calendar-date me-2" style="color: #F8ED1B;"></i>
+                {{ form.data.label }}
+              </label>
+              {{ form.data }}
+              {% if form.data.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.data.errors %}
+                    <i class="bi bi-exclamation-circle me-1"></i>{{ error }}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            {# ==== Campo de anexos com multi-upload acumulado + drag & drop ==== #}
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-paperclip me-2" style="color:#2F61AA;"></i>
+                Anexos (opcional)
+              </label>
+
+              {# input real fica escondido; usamos botão e dropzone #}
+              <input
+                type="file"
+                name="anexos"
+                id="id_anexos"
+                class="form-control d-none"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+              />
+
+              <div id="dropzone" class="border rounded p-4 text-center bg-light-subtle">
+                Arraste e solte os arquivos aqui<br/>
+                ou <button type="button" id="btnAddFiles" class="btn btn-link p-0">clique para selecionar</button>.
+              </div>
+
+              <div class="mt-2">
+                <strong class="small">Arquivos selecionados:</strong>
+                <ul id="fileList" class="list-unstyled small mt-2 mb-0"></ul>
+                <div id="fileErrors" class="text-danger small mt-2"></div>
+              </div>
+            </div>
+
+            <div class="text-center mt-5 d-flex justify-content-center gap-3 flex-column flex-sm-row">
+              <button type="submit" class="btn btn-primary btn-lg px-5" style="border-radius: 25px; background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%); border: none;">
+                <i class="bi bi-check-circle me-2"></i>
+                Cadastrar Conta
+              </button>
+
+              <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-lg px-5" style="border-radius: 25px;">
+                <i class="bi bi-arrow-left me-2"></i>
+                Voltar
+              </a>
+            </div>
+          </form>
+        </div>
+
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-
+{# mantenho a mesma CDN que você já vinha usando #}
 <script src="https://cdn.tiny.cloud/1/sezt9icuj1hnklywucfvbqalthsdthcyns2uk6ei4ha4wqyc/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
 
 <script>
-
 document.addEventListener('DOMContentLoaded', function() {
-    const desc = document.querySelector('textarea[name="descricao"]');
-    if (desc) {
-        if (!desc.id) desc.id = 'id_descricao';
-        desc.classList.add('form-control');
-        if (!desc.getAttribute('rows')) desc.setAttribute('rows', '8');
+  const card = document.querySelector('.card');
+  if (card) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(30px)';
+    card.style.transition = 'all 0.6s ease';
+    setTimeout(() => {
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 100);
+  }
+
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    if (!el.classList.contains('form-control') && el.type !== 'submit' && !el.classList.contains('btn')) {
+      el.classList.add('form-control');
+    }
+  });
+
+  const desc = document.querySelector('textarea[name="descricao"]');
+  if (desc && !desc.id) desc.id = 'id_descricao';
+  tinymce.init({
+    selector: 'textarea[name="descricao"]',
+    height: 320,
+    menubar: false,
+    plugins: 'advlist autolink lists link table code charmap quickbars',
+    toolbar: [
+      'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor',
+      '| alignleft aligncenter alignright alignjustify | bullist numlist outdent indent',
+      '| link table charmap | removeformat | code'
+    ].join(' '),
+    quickbars_selection_toolbar: 'bold italic underline | forecolor backcolor | bullist numlist | link',
+    font_family_formats: 'Inter=Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; Arial=arial,helvetica,sans-serif; Georgia=georgia,serif; Courier New=courier new,courier,monospace',
+    fontsize_formats: '12px 14px 16px 18px 20px 24px 28px 32px',
+    branding: false,
+    content_style: "body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif; font-size: 14px; }",
+    setup(editor) {
+      editor.on('input change keyup undo redo', function () {
+        const textarea = document.querySelector('textarea[name="descricao"]');
+        if (editor.getContent({ format: 'text' }).trim().length > 0) {
+          textarea.classList.remove('is-invalid');
+          textarea.classList.add('is-valid');
+        } else {
+          textarea.classList.remove('is-valid');
+        }
+      });
+    }
+  });
+
+  const form = document.querySelector('form');
+  const rawInputs = form.querySelectorAll('input:not([type="submit"]):not([type="button"]), select, textarea:not([name="descricao"])');
+  rawInputs.forEach(input => {
+    input.addEventListener('blur', function() {
+      if (this.required && this.value.trim() === '') {
+        this.classList.add('is-invalid');
+      } else {
+        this.classList.remove('is-invalid');
+        if (this.value.trim() !== '') this.classList.add('is-valid');
+      }
+    });
+    input.addEventListener('input', function () {
+      if (this.classList.contains('is-invalid')) this.classList.remove('is-invalid');
+    });
+  });
+
+  const input      = document.getElementById('id_anexos');
+  const dropzone   = document.getElementById('dropzone');
+  const btnAdd     = document.getElementById('btnAddFiles');
+  const fileListEl = document.getElementById('fileList');
+  const fileErrEl  = document.getElementById('fileErrors');
+
+  const MAX_MB_PER_FILE = 25; 
+  const ALLOWED = ['pdf','jpg','jpeg','png','doc','docx','xls','xlsx'];
+
+  const dt = new DataTransfer();
+
+  function bytesToSize(b){ if(b===0) return '0 B'; const k=1024,s=['B','KB','MB','GB'],i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(2))+' '+s[i]; }
+  function ext(n){ const p=(n||'').split('.'); return p.length>1?p.pop().toLowerCase():''; }
+
+  function renderList() {
+    fileListEl.innerHTML = '';
+    for (let i = 0; i < dt.files.length; i++) {
+      const f = dt.files[i];
+      const li = document.createElement('li');
+      li.className = 'd-flex align-items-center gap-2 py-1 border-bottom';
+
+      const name = document.createElement('span');
+      name.textContent = `${f.name} · ${bytesToSize(f.size)}`;
+      li.appendChild(name);
+
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'btn btn-sm btn-outline-danger ms-auto';
+      rm.innerHTML = '<i class="bi bi-x-lg"></i>';
+      rm.title = 'Remover';
+      rm.addEventListener('click', () => {
+        dt.items.remove(i);
+        input.files = dt.files;
+        renderList();
+      });
+      li.appendChild(rm);
+
+      fileListEl.appendChild(li);
+    }
+  }
+
+  function addFiles(files) {
+    fileErrEl.innerHTML = '';
+    const msgs = [];
+    for (const f of files) {
+      const e = ext(f.name);
+      if (!ALLOWED.includes(e)) {
+        msgs.push(`Arquivo não permitido: ${f.name}`);
+        continue;
+      }
+      if (f.size > MAX_MB_PER_FILE * 1024 * 1024) {
+        msgs.push(`Tamanho excede ${MAX_MB_PER_FILE}MB: ${f.name}`);
+        continue;
+      }
+      let dup = false;
+      for (let i = 0; i < dt.files.length; i++) {
+        const g = dt.files[i];
+        if (g.name === f.name && g.size === f.size) { dup = true; break; }
+      }
+      if (dup) continue;
+
+      dt.items.add(f);
+    }
+    input.files = dt.files;
+    renderList();
+    if (msgs.length) {
+      fileErrEl.innerHTML = msgs.map(m => `<div><i class="bi bi-exclamation-circle me-1"></i>${m}</div>`).join('');
+    }
+  }
+
+  btnAdd.addEventListener('click', () => input.click());
+
+  input.addEventListener('change', () => {
+    if (input.files?.length) addFiles(input.files);
+    input.value = '';
+  });
+
+  // Drag & Drop
+  ['dragenter','dragover'].forEach(ev =>
+    dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('border-primary'); })
+  );
+  ['dragleave','drop'].forEach(ev =>
+    dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('border-primary'); })
+  );
+  dropzone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer?.files || [];
+    if (files.length) addFiles(files);
+  });
+
+  // ===== Submit final: sincroniza anexos + valida campos obrigatórios =====
+  form.addEventListener('submit', function(e) {
+    if (tinymce?.triggerSave) tinymce.triggerSave();
+
+    // sincroniza a lista acumulada no input real
+    input.files = dt.files;
+
+    // valida campos obrigatórios
+    const titulo = document.querySelector('input[name="titulo"]')?.value || '';
+    const descricao = document.querySelector('textarea[name="descricao"]')?.value || '';
+    const data = document.querySelector('input[name="data"]')?.value || '';
+
+    let valid = true;
+
+    if (!titulo.trim()) {
+      const tituloInput = document.querySelector('input[name="titulo"]');
+      tituloInput?.classList.add('is-invalid');
+      tituloInput?.focus();
+      valid = false;
+    }
+    if (!descricao.trim()) {
+      const descTextarea = document.querySelector('textarea[name="descricao"]');
+      descTextarea?.classList.add('is-invalid');
+      if (valid) tinymce.get(descTextarea.id)?.focus();
+      valid = false;
+    }
+    if (!data.trim()) {
+      const dataInput = document.querySelector('input[name="data"]');
+      dataInput?.classList.add('is-invalid');
+      if (valid) dataInput?.focus();
+      valid = false;
     }
 
-    const card = document.querySelector('.card');
-    if (card) {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(30px)';
-        card.style.transition = 'all 0.6s ease';
-        setTimeout(() => {
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        }, 100);
+   
+    const msgs = [];
+    for (let i = 0; i < dt.files.length; i++) {
+      const f = dt.files[i];
+      const e = ext(f.name);
+      if (!ALLOWED.includes(e)) msgs.push(`Arquivo não permitido: ${f.name}`);
+      if (f.size > MAX_MB_PER_FILE * 1024 * 1024) msgs.push(`Tamanho excede ${MAX_MB_PER_FILE}MB: ${f.name}`);
+    }
+    if (msgs.length) {
+      fileErrEl.innerHTML = msgs.map(m => `<div><i class="bi bi-exclamation-circle me-1"></i>${m}</div>`).join('');
+      valid = false;
     }
 
-    document.querySelectorAll('input, select, textarea').forEach(el => {
-        if (!el.classList.contains('form-control') && el.type !== 'submit' && !el.classList.contains('btn')) {
-            el.classList.add('form-control');
-        }
-    });
-
-    const form = document.querySelector('form');
-    const rawInputs = form.querySelectorAll('input:not([type="submit"]):not([type="button"]), select, textarea:not([name="descricao"])');
-    rawInputs.forEach(input => {
-        input.addEventListener('blur', function() {
-            if (this.required && this.value.trim() === '') {
-                this.classList.add('is-invalid');
-            } else {
-                this.classList.remove('is-invalid');
-                if (this.value.trim() !== '') this.classList.add('is-valid');
-            }
-        });
-        input.addEventListener('input', function () {
-            if (this.classList.contains('is-invalid')) this.classList.remove('is-invalid');
-        });
-    });
-
-    tinymce.init({
-        selector: 'textarea[name="descricao"]',
-        height: 320,
-        menubar: false,
-        plugins: 'advlist autolink lists link table code charmap quickbars',
-        toolbar: [
-            'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | forecolor backcolor',
-            '| alignleft aligncenter alignright alignjustify | bullist numlist outdent indent',
-            '| link table charmap | removeformat | code'
-        ].join(' '),
-        quickbars_selection_toolbar: 'bold italic underline | forecolor backcolor | bullist numlist | link',
-        font_family_formats: 'Inter=Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; Arial=arial,helvetica,sans-serif; Georgia=georgia,serif; Courier New=courier new,courier,monospace',
-        fontsize_formats: '12px 14px 16px 18px 20px 24px 28px 32px',
-        branding: false,
-        content_style: "body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif; font-size: 14px; }",
-        setup(editor) {
-            editor.on('input change keyup undo redo', function () {
-                const textarea = document.querySelector('textarea[name="descricao"]');
-                if (editor.getContent({ format: 'text' }).trim().length > 0) {
-                    textarea.classList.remove('is-invalid');
-                    textarea.classList.add('is-valid');
-                } else {
-                    textarea.classList.remove('is-valid');
-                }
-            });
-        }
-    });
-
-    form.addEventListener('submit', function(e) {
-        if (tinymce?.triggerSave) tinymce.triggerSave();
-
-        const titulo = document.querySelector('input[name="titulo"]')?.value || '';
-        const descricao = document.querySelector('textarea[name="descricao"]')?.value || '';
-        const data = document.querySelector('input[name="data"]')?.value || '';
-
-        let valid = true;
-
-        if (!titulo.trim()) {
-            const tituloInput = document.querySelector('input[name="titulo"]');
-            tituloInput?.classList.add('is-invalid');
-            tituloInput?.focus();
-            valid = false;
-        }
-        if (!descricao.trim()) {
-            const descTextarea = document.querySelector('textarea[name="descricao"]');
-            descTextarea?.classList.add('is-invalid');
-            if (valid) tinymce.get(descTextarea.id)?.focus();
-            valid = false;
-        }
-        if (!data.trim()) {
-            const dataInput = document.querySelector('input[name="data"]');
-            dataInput?.classList.add('is-invalid');
-            if (valid) dataInput?.focus();
-            valid = false;
-        }
-
-        if (!valid) {
-            e.preventDefault();
-            return;
-        }
-
-        const submitBtn = document.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Cadastrando...';
-            submitBtn.disabled = true;
-        }
-    });
+    if (!valid) e.preventDefault();
+  });
 });
 </script>
 {% endblock %}

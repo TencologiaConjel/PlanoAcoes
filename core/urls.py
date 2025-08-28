@@ -10,4 +10,6 @@ urlpatterns = [
     path('excluir/<int:pk>/', views.excluir_conta, name='excluir_conta'),
     path('api/contas/', views.api_contas_json, name='api_contas'),
     path('financeiro/', views.powerbi, name='dashboard_financeiro'),
+    path('anexos/<int:pk>/baixar/', views.baixar_anexo, name='baixar_anexo'),
+    path('anexos/<int:pk>/excluir/', views.excluir_anexo, name='excluir_anexo'),
 ]

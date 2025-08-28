@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'core',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -107,3 +108,29 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 CSRF_TRUSTED_ORIGINS = [
     'https://planoacoes-production.up.railway.app'
 ]
+
+
+from decouple import config
+
+AWS_ACCESS_KEY_ID        = config("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY    = config("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME  = config("AWS_STORAGE_BUCKET_NAME", default="webserviceconjel")
+AWS_S3_REGION_NAME       = config("AWS_S3_REGION_NAME",  default="us-east-2")
+
+# Informe APENAS o host do CloudFront (sem https)
+AWS_CLOUDFRONT_DOMAIN    = config("AWS_CLOUDFRONT_DOMAIN", default="dXXXX.cloudfront.net")
+AWS_S3_CUSTOM_DOMAIN     = AWS_CLOUDFRONT_DOMAIN.replace("https://", "").replace("http://", "")
+
+AWS_DEFAULT_ACL = None
+AWS_S3_OBJECT_PARAMETERS = {"CacheControl": "max-age=86400"}
+
+# Se sua distro for PÚBLICA para o viewer (Restrict Viewer Access = No):
+AWS_QUERYSTRING_AUTH = False
+
+# Storage padrão em S3
+DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+
+# MEDIA_URL saindo pela CloudFront
+MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
+
+
