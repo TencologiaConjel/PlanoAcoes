@@ -427,48 +427,37 @@ def powerbi(request):
     return render(request, "powerbi.html", ctx)
 
 
+# views.py
+from django.templatetags.static import static
+
 @login_required
 def logo_base(request, base_id: int):
-    """
-    Serve a logo da base via URL assinada do CloudFront/S3
-    """
     base = get_object_or_404(Base, pk=base_id)
-    
-    # Verificar permissões
+    # checa acesso
     if not (request.user.is_superuser or request.user.bases.filter(pk=base_id).exists()):
+        return HttpResponseForbidden('Sem permissão para a logo desta base.')
+
+    # sem logo -> imagem estática padrão
+    if not base.logo:
         return redirect(static('img/logo-default.png'))
-    
-    if not base.logo or not base.logo.name:
-        return redirect(static('img/logo-default.png'))
-    
+
+    # chave relativa no storage (sem Origin Path)
+    rel_key = base.logo.name
+    abs_key = _rel_to_abs_key(rel_key)
+
+    filename = os.path.basename(rel_key)
+    ctype = getattr(base.logo, "file", None)
+    ctype = getattr(ctype, "content_type", None) or mimetypes.guess_type(filename)[0] or "image/png"
+
     try:
-        # Gerar URL assinada para a logo
-        rel_key = base.logo.name
-        abs_key = _rel_to_abs_key(rel_key)
-        filename = f"logo_{base.slug}.jpg"
-        
-        # Tentar CloudFront primeiro, depois S3
-        url = cloudfront_signed_url_with_inline(
-            rel_key, 
-            expires_in=3600,  # 1 hora para logos
-            filename=filename, 
-            content_type="image/jpeg"
-        )
-        
+        url = cloudfront_signed_url_with_inline(rel_key, 600, filename=filename, content_type=ctype)
         if not url:
-            url = s3_presigned_url(
-                abs_key, 
-                expires_in=3600,
-                filename=filename, 
-                content_type="image/jpeg",
-                inline=True
-            )
-        
+            url = s3_presigned_url(abs_key, 600, filename=filename, content_type=ctype, inline=True)
         return redirect(url)
-        
     except Exception as e:
-        logger.exception("Erro ao gerar URL da logo para base %s: %s", base_id, e)
+        logger.exception("Erro ao assinar URL da logo da base %s: %s", base_id, e)
         return redirect(static('img/logo-default.png'))
+
 
 
 # Context processor para disponibilizar a logo em todos os templates
