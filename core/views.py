@@ -427,16 +427,66 @@ def powerbi(request):
     return render(request, "powerbi.html", ctx)
 
 
-# =========================
-# Logo da Base
-# =========================
 @login_required
 def logo_base(request, base_id: int):
+    """
+    Serve a logo da base via URL assinada do CloudFront/S3
+    """
     base = get_object_or_404(Base, pk=base_id)
+    
+    # Verificar permissões
     if not (request.user.is_superuser or request.user.bases.filter(pk=base_id).exists()):
-        return HttpResponseForbidden('Sem permissão para a logo desta base.')
-
-    if not base.logo:
+        return redirect(static('img/logo-default.png'))
+    
+    if not base.logo or not base.logo.name:
+        return redirect(static('img/logo-default.png'))
+    
+    try:
+        # Gerar URL assinada para a logo
+        rel_key = base.logo.name
+        abs_key = _rel_to_abs_key(rel_key)
+        filename = f"logo_{base.slug}.jpg"
+        
+        # Tentar CloudFront primeiro, depois S3
+        url = cloudfront_signed_url_with_inline(
+            rel_key, 
+            expires_in=3600,  # 1 hora para logos
+            filename=filename, 
+            content_type="image/jpeg"
+        )
+        
+        if not url:
+            url = s3_presigned_url(
+                abs_key, 
+                expires_in=3600,
+                filename=filename, 
+                content_type="image/jpeg",
+                inline=True
+            )
+        
+        return redirect(url)
+        
+    except Exception as e:
+        logger.exception("Erro ao gerar URL da logo para base %s: %s", base_id, e)
         return redirect(static('img/logo-default.png'))
 
-    return redirect(base.logo.url)
+
+# Context processor para disponibilizar a logo em todos os templates
+def base_context(request):
+    """
+    Context processor para adicionar informações da base atual em todos os templates
+    """
+    context = {}
+    
+    if request.user.is_authenticated:
+        base_atual = _resolver_base_para_request(request)
+        context['base_atual'] = base_atual
+        
+        # URL da logo se existir
+        if base_atual and base_atual.logo:
+            from django.urls import reverse
+            context['logo_url'] = reverse('logo_base', args=[base_atual.id])
+        else:
+            context['logo_url'] = static('img/logo-default.png')
+    
+    return context

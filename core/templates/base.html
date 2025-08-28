@@ -195,16 +195,17 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%);">
+    <!-- Navbar corrigida no base.html -->
+<nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%);">
   <div class="container">
     {% load static %}
     
     <a class="navbar-brand fw-bold d-flex align-items-center gap-3" href="{% url 'dashboard' %}">
         {% with current_base=request.current_base|default:base_atual %}
             {% if current_base and current_base.id %}
-                <!-- Tenta carregar logo da base do S3 ou database -->
+                <!-- Logo da base atual -->
                 <img
-                    src="{% if current_base.logo %}{{ current_base.logo.url }}{% else %}{% url 'logo_base' current_base.id %}{% endif %}"
+                    src="{% url 'logo_base' current_base.id %}"
                     alt="{{ current_base.nome }}"
                     class="navbar-logo"
                     data-base-name="{{ current_base.nome }}"
@@ -217,22 +218,16 @@
                 </div>
                 <span>{{ current_base.nome }} - Prestação de Contas</span>
             {% else %}
-                <!-- Sem base: Logo padrão do S3 ou ícone -->
-                {% if logo_padrao_s3_url %}
-                    <img
-                        src="{{ logo_padrao_s3_url }}"
-                        alt="Prestação de Contas"
-                        class="navbar-logo"
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                    >
-                    <div class="navbar-logo-placeholder" style="display: none;">
-                        <i class="bi bi-building-fill"></i>
-                    </div>
-                {% else %}
-                    <div class="navbar-logo-placeholder">
-                        <i class="bi bi-building-fill"></i>
-                    </div>
-                {% endif %}
+                <!-- Sem base: Logo padrão -->
+                <img
+                    src="{% static 'img/logo-default.png' %}"
+                    alt="Prestação de Contas"
+                    class="navbar-logo"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                >
+                <div class="navbar-logo-placeholder" style="display: none;">
+                    <i class="bi bi-building-fill"></i>
+                </div>
                 <span>Prestação de Contas Transparente</span>
             {% endif %}
         {% endwith %}
