@@ -99,7 +99,6 @@ class ContaQuerySet(models.QuerySet):
 
 
 class Conta(models.Model):
-    # deixe null=True/blank=True enquanto faz o backfill; depois troque pra False numa migração final
     base = models.ForeignKey(Base, on_delete=models.CASCADE, related_name='contas',
                              null=True, blank=True)
 
@@ -263,3 +262,5 @@ def _delete_old_logo_on_change(sender, instance: Base, **kwargs):
                 storage.delete(old_file.name)
         except Exception:
             pass
+
+        
