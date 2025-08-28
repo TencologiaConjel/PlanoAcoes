@@ -1,3 +1,4 @@
+# models.py
 from django.conf import settings
 from django.db import models
 from django.db.models import UniqueConstraint
@@ -6,7 +7,14 @@ from django.utils import timezone
 from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
 
-import os, mimetypes, uuid, re
+import os
+import mimetypes
+import uuid
+import re
+
+# Storage privado (o mesmo usado nos anexos)
+from .storages import S3PrivateMediaStorage
+
 
 # ========= helpers de filename =========
 _filename_sanitize_re = re.compile(r"[^\w\-. ]+", re.UNICODE)
@@ -15,11 +23,16 @@ def _safe_name(name: str) -> str:
     base = _filename_sanitize_re.sub("_", base).strip() or "arquivo"
     return base
 
+
 # ========= Base / Membership =========
 
 def base_logo_upload_to(instance, filename: str):
+    """
+    logos/<slug>/<uuid>_<nome>
+    """
     slug = getattr(instance, "slug", None) or slugify(getattr(instance, "nome", "") or "base")
     return f"logos/{slug}/{uuid.uuid4().hex}_{_safe_name(filename)}"
+
 
 class Base(models.Model):
     nome = models.CharField(max_length=150, unique=True)
@@ -27,12 +40,13 @@ class Base(models.Model):
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
-    # >>> força salvar logo no S3 (ou fallback, se seu S3PrivateMediaStorage tratar)
-    from .storages import S3PrivateMediaStorage
+    # Logo privada no S3 (entregue via CloudFront assinada)
     logo = models.ImageField(
         storage=S3PrivateMediaStorage(),
         upload_to=base_logo_upload_to,
-        null=True, blank=True, max_length=512
+        null=True,
+        blank=True,
+        max_length=512,
     )
 
     users = models.ManyToManyField(
@@ -83,9 +97,12 @@ class ContaQuerySet(models.QuerySet):
             return self
         return self.filter(base__in=user.bases.all())
 
+
 class Conta(models.Model):
+    # deixe null=True/blank=True enquanto faz o backfill; depois troque pra False numa migração final
     base = models.ForeignKey(Base, on_delete=models.CASCADE, related_name='contas',
                              null=True, blank=True)
+
     titulo = models.CharField(max_length=200, verbose_name='Título')
     descricao = models.TextField(verbose_name='Descrição')
     data = models.DateField(verbose_name='Data')
@@ -107,12 +124,11 @@ class Conta(models.Model):
 
 
 # ========= Anexo (S3 via django-storages) =========
-from .storages import S3PrivateMediaStorage  # <- seu storage do app
 
 def anexo_upload_to(instance, filename: str):
     """
-    Novo path: anexos/<base>/conta_<id>/<uuid>_<nome>
-    (menos pastas: removido YYYY/MM)
+    Menos pastas:
+    anexos/<base>/conta_<id>/<uuid>_<nome>
     """
     base = getattr(instance, "base", None)
     if not base and getattr(instance, "conta", None):
@@ -121,11 +137,13 @@ def anexo_upload_to(instance, filename: str):
     conta_id = getattr(instance, "conta_id", None) or "sem"
     return f"anexos/{base_slug}/conta_{conta_id}/{uuid.uuid4().hex}_{_safe_name(filename)}"
 
+
 class AnexoQuerySet(models.QuerySet):
     def for_user(self, user):
         if getattr(user, "is_superuser", False):
             return self
         return self.filter(base__in=user.bases.all())
+
 
 class Anexo(models.Model):
     base   = models.ForeignKey("Base", on_delete=models.CASCADE, related_name="anexos")
@@ -166,7 +184,6 @@ class Anexo(models.Model):
             except Exception:
                 pass
         if not self.content_type:
-            # tenta do upload; se não, usa mimetypes pelo nome
             ct = getattr(self.arquivo, "content_type", "") or mimetypes.guess_type(self.nome_original or "")[0] or ""
             self.content_type = ct
         if self.conta_id and not self.base_id:
@@ -174,8 +191,12 @@ class Anexo(models.Model):
         super().save(*args, **kwargs)
 
 
+
 @receiver(post_delete, sender=Anexo)
 def _delete_file_on_instance_delete(sender, instance: Anexo, **kwargs):
+    """
+    Ao deletar o Anexo no banco, removemos o arquivo do storage.
+    """
     try:
         if instance.arquivo and instance.arquivo.name:
             storage = instance.arquivo.storage
@@ -184,8 +205,12 @@ def _delete_file_on_instance_delete(sender, instance: Anexo, **kwargs):
     except Exception:
         pass
 
+
 @receiver(pre_save, sender=Anexo)
 def _delete_old_file_on_change(sender, instance: Anexo, **kwargs):
+    """
+    Se trocar o arquivo de um anexo existente, apaga o arquivo antigo no storage.
+    """
     if not instance.pk:
         return
     try:
@@ -195,6 +220,43 @@ def _delete_old_file_on_change(sender, instance: Anexo, **kwargs):
     old_file = getattr(old, "arquivo", None)
     new_file = getattr(instance, "arquivo", None)
     if old_file and old_file.name and old_file != new_file:
+        try:
+            storage = old_file.storage
+            if storage.exists(old_file.name):
+                storage.delete(old_file.name)
+        except Exception:
+            pass
+
+
+@receiver(post_delete, sender=Base)
+def _delete_logo_on_base_delete(sender, instance: Base, **kwargs):
+    """
+    Remove a logo do storage quando a Base é deletada.
+    """
+    try:
+        logo = getattr(instance, "logo", None)
+        if logo and logo.name:
+            storage = logo.storage
+            if storage.exists(logo.name):
+                storage.delete(logo.name)
+    except Exception:
+        pass
+
+
+@receiver(pre_save, sender=Base)
+def _delete_old_logo_on_change(sender, instance: Base, **kwargs):
+    """
+    Se trocar a logo de uma Base existente, apaga o arquivo antigo no storage.
+    """
+    if not instance.pk:
+        return
+    try:
+        old = Base.objects.get(pk=instance.pk)
+    except Base.DoesNotExist:
+        return
+    old_file = getattr(old, "logo", None)
+    new_file = getattr(instance, "logo", None)
+    if old_file and getattr(old_file, "name", None) and old_file != new_file:
         try:
             storage = old_file.storage
             if storage.exists(old_file.name):
