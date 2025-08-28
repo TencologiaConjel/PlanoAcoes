@@ -172,13 +172,16 @@
     <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%);">
   <div class="container">
     {% with b=request.current_base|default:base_atual %}
-    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
-     {% if b and b.logo %}
-        <img src="{{ b.logo.url }}" alt="{{ b.nome }}" style="height:60px;width:auto;border-radius:6px;"
-            referrerpolicy="no-referrer">
-        {% endif %}
+    {% load static %}
+    {% firstof request.current_base base_atual "" as current_base %}
 
-      <span>Prestação de Contas</span>
+    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
+    <img
+        src="{% if current_base %}{% url 'logo_base' current_base.id %}{% else %}{% static 'img/logo-default.png' %}{% endif %}"
+        alt="{% if current_base %}{{ current_base.nome }}{% else %}Prestação de Contas{% endif %}"
+        style="height:28px;width:auto;border-radius:6px"
+    >
+    <span>{% if current_base %}{{ current_base.nome }} {% endif %}Prestação de Contas</span>
     </a>
     {% endwith %}
 
