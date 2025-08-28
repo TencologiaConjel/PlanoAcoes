@@ -170,38 +170,38 @@
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%);">
-        <div class="container">
-            <a class="navbar-brand fw-bold" href="{% url 'dashboard' %}">
-                <svg width="32" height="32" viewBox="0 0 100 100" class="me-2" style="vertical-align: middle;">
-                    <circle cx="25" cy="25" r="8" fill="#F8ED1B" stroke="#E6D000" stroke-width="2"/>
-                    <circle cx="45" cy="35" r="6" fill="#2F61AA"/>
-                    <path d="M35 45 Q40 50 45 55 Q50 50 55 45" stroke="#2F61AA" stroke-width="3" fill="none"/>
-                    <circle cx="65" cy="55" r="6" fill="#293A83"/>
-                    <path d="M55 65 Q60 70 65 75 Q70 70 75 65" stroke="#293A83" stroke-width="3" fill="none"/>
-                </svg>
-                Prestação de Contas
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'dashboard_financeiro' %}">
-                            <i class="bi bi-house me-1"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'cadastrar_conta' %}">
-                            <i class="bi bi-plus-circle me-1"></i>Nova Conta
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+  <div class="container">
+    {% with b=request.current_base|default:base_atual %}
+    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
+     {% if b and b.logo %}
+        <img src="{{ b.logo.url }}" alt="{{ b.nome }}" style="height:60px;width:auto;border-radius:6px;"
+            referrerpolicy="no-referrer">
+        {% endif %}
+
+      <span>Prestação de Contas</span>
+    </a>
+    {% endwith %}
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'dashboard_financeiro' %}">
+            <i class="bi bi-house me-1"></i>Dashboard
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'cadastrar_conta' %}">
+            <i class="bi bi-plus-circle me-1"></i>Nova Conta
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
 
     <main class="container-fluid py-4">
         {% if messages %}

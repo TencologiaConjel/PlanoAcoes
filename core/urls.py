@@ -12,4 +12,5 @@ urlpatterns = [
     path('financeiro/', views.powerbi, name='dashboard_financeiro'),
     path('anexos/<int:pk>/baixar/', views.baixar_anexo, name='baixar_anexo'),
     path('anexos/<int:pk>/excluir/', views.excluir_anexo, name='excluir_anexo'),
+    path('bases/<int:base_id>/logo/', views.logo_base, name='logo_base'),
 ]

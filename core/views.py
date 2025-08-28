@@ -5,18 +5,22 @@ from django.contrib.auth.decorators import login_required
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse, HttpResponseForbidden
-from django.db.models import Q, Sum, Prefetch
+from django.db.models import Prefetch
 from django.conf import settings
+from django.templatetags.static import static
 
 from .models import Conta, Base, Anexo
 from .forms import ContaForm
 
-import os, base64, logging
+import os, base64, logging, mimetypes
 import boto3
-from botocore.exceptions import ClientError
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
+# =========================
+# AWS / CloudFront settings
+# =========================
 AWS_BUCKET       = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
 AWS_REGION       = getattr(settings, "AWS_S3_REGION_NAME", "sa-east-1")
 AWS_S3_LOCATION  = (getattr(settings, "AWS_S3_LOCATION", "") or os.getenv("AWS_S3_LOCATION", "") or "").strip("/")
@@ -35,6 +39,7 @@ try:
 except Exception:
     CloudFrontSigner = None
 
+
 def _s3_client():
     return boto3.client(
         "s3",
@@ -42,6 +47,7 @@ def _s3_client():
         aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
         region_name=AWS_REGION,
     )
+
 
 _CF_SIGNER = None
 def _get_cf_signer():
@@ -64,50 +70,88 @@ def _get_cf_signer():
     _CF_SIGNER = CloudFrontSigner(CF_KEY_ID, rsa_signer)
     return _CF_SIGNER
 
+
 def _rel_to_abs_key(rel_key: str) -> str:
-    """Converte a chave RELATIVA (FileField.name) em chave ABSOLUTA do S3, aplicando Origin Path se existir."""
+    """Converte chave RELATIVA (FileField.name) em chave ABSOLUTA do S3 aplicando Origin Path, se houver."""
     return f"{AWS_S3_LOCATION}/{rel_key}" if AWS_S3_LOCATION else rel_key
 
-def cloudfront_signed_url(rel_key: str, expires_in: int = 600) -> str | None:
+
+def s3_presigned_url(
+    abs_key: str,
+    expires_in: int = 600,
+    *,
+    filename: str | None = None,
+    content_type: str | None = None,
+    inline: bool = True,
+) -> str:
+    """URL pré-assinada do S3 com Content-Disposition/Type opcionais."""
+    params = {"Bucket": AWS_BUCKET, "Key": abs_key}
+    if inline:
+        dispo = 'inline'
+        if filename:
+            dispo = f'inline; filename="{filename}"'
+        params["ResponseContentDisposition"] = dispo
+    if content_type:
+        params["ResponseContentType"] = content_type
+
+    return _s3_client().generate_presigned_url(
+        "get_object",
+        Params=params,
+        ExpiresIn=expires_in,
+    )
+
+
+def cloudfront_signed_url_with_inline(
+    rel_key: str,
+    expires_in: int = 600,
+    *,
+    filename: str | None = None,
+    content_type: str | None = None,
+) -> str | None:
     """
-    Gera URL (assinada) via CloudFront para a chave RELATIVA (NÃO incluir Origin Path aqui).
-    Retorna None se CF não estiver configurado.
+    Gera URL CF assinada e acrescenta query para inline se sua distribuição
+    encaminhar response-content-* ao S3.
     """
     if not CF_DOMAIN:
         return None
-    from datetime import datetime, timedelta, timezone as tz
-    url = f"https://{CF_DOMAIN}/{rel_key}"
+
+    base_url = f"https://{CF_DOMAIN}/{rel_key}"
     signer = _get_cf_signer()
     if not signer:
-        return url  # distribuição pública (sem assinatura)
-    exp = datetime.now(tz=tz.utc) + timedelta(seconds=expires_in)
-    return signer.generate_presigned_url(url, date_less_than=exp)
+        q = {}
+        if content_type:
+            q["response-content-type"] = content_type
+        if filename:
+            q["response-content-disposition"] = f'inline; filename="{filename}"'
+        return base_url + (("?" + urlencode(q)) if q else "")
 
-def s3_presigned_url(abs_key: str, expires_in: int = 600) -> str:
-    """Fallback: URL pré-assinada do S3 direto (ABS key = com Origin Path, se houver)."""
-    return _s3_client().generate_presigned_url(
-        "get_object",
-        Params={"Bucket": AWS_BUCKET, "Key": abs_key},
-        ExpiresIn=expires_in,
-    )
+    from datetime import datetime, timedelta, timezone as tz
+    exp = datetime.now(tz=tz.utc) + timedelta(seconds=expires_in)
+    signed = signer.generate_presigned_url(base_url, date_less_than=exp)
+
+    q = {}
+    if content_type:
+        q["response-content-type"] = content_type
+    if filename:
+        q["response-content-disposition"] = f'inline; filename="{filename}"'
+    if q:
+        glue = "&" if "?" in signed else "?"
+        signed = signed + glue + urlencode(q)
+
+    return signed
+
 
 # =========================
 # Helpers de base/escopo
 # =========================
 def _bases_do_usuario(user):
-    """Retorna as bases vinculadas ao usuário (ou vazio)."""
     try:
         return user.bases.all()
     except Exception:
         return Base.objects.none()
 
+
 def _resolver_base_para_request(request):
-    """
-    Define a base-alvo da requisição:
-      1) (superuser) se vier ?base=<id> ou POST['base']
-      2) request.current_base (se middleware estiver habilitado)
-      3) primeira base do usuário
-    """
     if request.user.is_authenticated and request.user.is_superuser:
         base_id = request.POST.get('base') or request.GET.get('base')
         if base_id:
@@ -125,13 +169,8 @@ def _resolver_base_para_request(request):
 
     return None
 
+
 def _contas_queryset_para_dashboard(request):
-    """
-    QuerySet de Contas para o dashboard:
-    - Escopo por base/usuário
-    - select_related('base') + prefetch dos anexos com only() para campos usados no template
-    - Ordenação por data e criado_em (desc)
-    """
     anexos_qs = Anexo.objects.only(
         'id', 'arquivo', 'nome_original', 'content_type', 'tamanho', 'criado_em', 'conta_id', 'base_id'
     )
@@ -145,8 +184,8 @@ def _contas_queryset_para_dashboard(request):
         bases_user = _bases_do_usuario(request.user)
         qs = Conta.objects.select_related('base').filter(base__in=bases_user)
 
-    qs = qs.prefetch_related(Prefetch('anexos', queryset=anexos_qs)).order_by('-data', '-criado_em')
-    return qs
+    return qs.prefetch_related(Prefetch('anexos', queryset=anexos_qs)).order_by('-data', '-criado_em')
+
 
 # =========================
 # Auth
@@ -183,51 +222,44 @@ def login_view(request):
 
     return render(request, 'login.html')
 
+
 # =========================
 # App
 # =========================
 @login_required
 def dashboard(request):
-    """Tela principal com linha do tempo e estatísticas (escopado por base)."""
     base_atual = _resolver_base_para_request(request)
-
-    # Queryset otimizado com anexos prefetch
     contas = _contas_queryset_para_dashboard(request)
-
-    # Bases para o seletor
     bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
-
-    context = {
+    return render(request, 'dashboard.html', {
         'contas': contas,
-        'base_atual': base_atual,  # caso algum template use
+        'base_atual': base_atual,
         'bases': bases,
-    }
-    return render(request, 'dashboard.html', context)
+    })
+
 
 @login_required
 def cadastrar_conta(request):
-    """
-    Cadastrar nova conta — garante que `conta.base` seja definida e faz upload dos anexos (múltiplos).
-    """
+    base_atual = _resolver_base_para_request(request)
+
     if request.method == 'POST':
         form = ContaForm(request.POST)
-        files = request.FILES.getlist('anexos')  # <input name="anexos" multiple>
+        files = request.FILES.getlist('anexos')
         if form.is_valid():
             conta = form.save(commit=False)
-            conta.base = _resolver_base_para_request(request)
+            conta.base = base_atual
 
             if not conta.base:
                 form.add_error(None, 'Você não está vinculado a nenhuma base. Peça para um administrador configurar seu acesso.')
             else:
                 conta.save()
-                # Upload dos anexos
                 for f in files:
                     if not f:
                         continue
                     Anexo.objects.create(
                         base=conta.base,
                         conta=conta,
-                        arquivo=f,                  # sobe via storage configurado
+                        arquivo=f,
                         nome_original=getattr(f, 'name', ''),
                         uploaded_by=request.user,
                     )
@@ -238,12 +270,12 @@ def cadastrar_conta(request):
     else:
         form = ContaForm()
 
-    bases = Base.objects.all() if request.user.is_superuser else None
-    return render(request, 'cadastrar.html', {'form': form, 'bases': bases})
+    bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
+    return render(request, 'cadastrar.html', {'form': form, 'bases': bases, 'base_atual': base_atual})
+
 
 @login_required
 def editar_conta(request, pk):
-    """Editar conta existente — só se pertencer à base do usuário (ou superuser)."""
     if request.user.is_superuser:
         conta = get_object_or_404(Conta.objects.select_related('base'), pk=pk)
     else:
@@ -253,12 +285,14 @@ def editar_conta(request, pk):
             base__in=_bases_do_usuario(request.user)
         )
 
+    base_atual = conta.base
+
     if request.method == 'POST':
         form = ContaForm(request.POST, instance=conta)
-        files = request.FILES.getlist('anexos')  # múltiplos
+        files = request.FILES.getlist('anexos')
         if form.is_valid():
             obj = form.save(commit=False)
-            obj.base = conta.base  # não permitir troca de base aqui
+            obj.base = conta.base
             obj.save()
 
             for f in files:
@@ -279,25 +313,26 @@ def editar_conta(request, pk):
     else:
         form = ContaForm(instance=conta)
 
-    bases = Base.objects.all() if request.user.is_superuser else None
+    bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
     anexos = conta.anexos.all()
-    return render(request, 'editar.html', {'form': form, 'conta': conta, 'bases': bases, 'anexos': anexos})
+    return render(request, 'editar.html', {'form': form, 'conta': conta, 'bases': bases, 'base_atual': base_atual, 'anexos': anexos})
+
 
 @login_required
 def excluir_conta(request, pk):
-    """Excluir conta — só se pertencer à base do usuário (ou superuser)."""
     if request.user.is_superuser:
         conta = get_object_or_404(Conta, pk=pk)
     else:
         conta = get_object_or_404(Conta, pk=pk, base__in=_bases_do_usuario(request.user))
 
+    base_atual = conta.base
+
     if request.method == 'POST':
         titulo_conta = conta.titulo
 
-        # remove fisicamente os anexos (S3) antes de excluir a conta
         for ax in list(conta.anexos.all()):
             try:
-                ax.arquivo.delete(save=False)  # deleta arquivo do storage
+                ax.arquivo.delete(save=False)
             except Exception as e:
                 logger.warning("Falha ao deletar arquivo do S3 (%s): %s", getattr(ax, "id", "?"), e)
             ax.delete()
@@ -306,39 +341,39 @@ def excluir_conta(request, pk):
         messages.success(request, f'Conta "{titulo_conta}" excluída com sucesso!')
         return redirect('dashboard')
 
-    return render(request, 'excluir.html', {'conta': conta})
+    bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
+    return render(request, 'excluir.html', {'conta': conta, 'bases': bases, 'base_atual': base_atual})
+
 
 @login_required
 def baixar_anexo(request, pk):
-    """
-    Redireciona para URL assinada na CloudFront (ou S3), após validar o escopo da base.
-    - Usa a CHAVE RELATIVA que está no FileField (ex.: 'anexos_v2/...').
-    - Se sua distribuição tem Origin Path, NÃO colocar na URL; apenas na chave do S3.
-    """
+    """Redireciona para URL (CF ou S3) com Content-Disposition=inline, após validar a base."""
     anexo = get_object_or_404(Anexo.objects.select_related('base', 'conta'), pk=pk)
     if not (request.user.is_superuser or request.user.bases.filter(pk=anexo.base_id).exists()):
         return HttpResponseForbidden('Sem permissão para este anexo.')
 
-    rel_key = anexo.arquivo.name  # chave relativa no storage
+    rel_key = anexo.arquivo.name
     if not rel_key:
         messages.error(request, "Arquivo não encontrado para este anexo.")
         return redirect('editar_conta', pk=anexo.conta_id)
 
-    abs_key = _rel_to_abs_key(rel_key)
+    abs_key  = _rel_to_abs_key(rel_key)
+    filename = (anexo.nome_original or anexo.filename or "arquivo")
+    ctype    = (anexo.content_type or mimetypes.guess_type(filename)[0] or None)
 
     try:
-        url = cloudfront_signed_url(rel_key, 600) or s3_presigned_url(abs_key, 600)
+        url = cloudfront_signed_url_with_inline(rel_key, 600, filename=filename, content_type=ctype) \
+              or s3_presigned_url(abs_key, 600, filename=filename, content_type=ctype, inline=True)
         return redirect(url)
     except Exception as e:
         logger.exception("Erro ao gerar URL do anexo %s: %s", pk, e)
         messages.error(request, "Não foi possível gerar a URL do anexo.")
         return redirect('editar_conta', pk=anexo.conta_id)
 
+
 @login_required
 def excluir_anexo(request, pk):
-    """
-    Exclui o anexo (arquivo + registro), se o usuário tiver acesso à base.
-    """
+    """Exclui o anexo (arquivo + registro), se o usuário tiver acesso à base."""
     anexo = get_object_or_404(Anexo.objects.select_related('base', 'conta'), pk=pk)
     if not (request.user.is_superuser or request.user.bases.filter(pk=anexo.base_id).exists()):
         return HttpResponseForbidden('Sem permissão para este anexo.')
@@ -346,12 +381,13 @@ def excluir_anexo(request, pk):
     conta_id = anexo.conta_id
     if request.method == 'POST':
         try:
-            anexo.arquivo.delete(save=False)  # remove do S3
+            anexo.arquivo.delete(save=False)
         except Exception as e:
             logger.warning("Falha ao deletar arquivo do S3 (anexo %s): %s", pk, e)
         anexo.delete()
         messages.success(request, 'Anexo excluído.')
     return redirect('editar_conta', pk=conta_id)
+
 
 @login_required
 def api_contas_json(request):
@@ -374,93 +410,33 @@ def api_contas_json(request):
 
     return JsonResponse({'contas': contas_list})
 
+
 @login_required
 def powerbi(request):
+    base_atual = _resolver_base_para_request(request)
+    bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
+
     url = ("https://app.powerbi.com/view?"
            "r=eyJrIjoiM2JlODRjN2QtYTUwMC00NjIwLTk3MjEtOGFlMmRlMTBmNTExIiwidCI6ImJmODhhNDU2LTQwZTctNDg5OC1hYmMwLWUwNmM0MWVmZTliOCJ9")
     ctx = {
         "powerbi_url": url,
         "back_url": "/",
+        "base_atual": base_atual,
+        "bases": bases,
     }
     return render(request, "powerbi.html", ctx)
-def s3_presigned_url(abs_key: str, expires_in: int = 600, *, filename: str | None = None, content_type: str | None = None, inline: bool = True) -> str:
-    """URL pré-assinada S3, com Content-Disposition/Type opcionais."""
-    params = {"Bucket": AWS_BUCKET, "Key": abs_key}
-    if inline:
-        dispo = 'inline'
-        if filename:
-            dispo = f'inline; filename="{filename}"'
-        params["ResponseContentDisposition"] = dispo
-    if content_type:
-        params["ResponseContentType"] = content_type
-
-    return _s3_client().generate_presigned_url(
-        "get_object",
-        Params=params,
-        ExpiresIn=expires_in,
-    )
-
-from urllib.parse import urlencode
-
-def cloudfront_signed_url_with_inline(rel_key: str, expires_in: int = 600, *, filename: str | None = None, content_type: str | None = None) -> str | None:
-    """
-    Gera URL CF assinada e acrescenta query para inline, se sua dist. encaminhar
-    response-content-*. Se não encaminhar, o S3 presign já resolve.
-    """
-    if not CF_DOMAIN:
-        return None
-
-    base_url = f"https://{CF_DOMAIN}/{rel_key}"
-    signer = _get_cf_signer()
-    if not signer:
-        # distribuição pública
-        q = {}
-        if content_type:
-            q["response-content-type"] = content_type
-        if filename:
-            q["response-content-disposition"] = f'inline; filename="{filename}"'
-        return base_url + (("?" + urlencode(q)) if q else "")
-
-    from datetime import datetime, timedelta, timezone as tz
-    exp = datetime.now(tz=tz.utc) + timedelta(seconds=expires_in)
-    signed = signer.generate_presigned_url(base_url, date_less_than=exp)
-
-    q = {}
-    if content_type:
-        q["response-content-type"] = content_type
-    if filename:
-        q["response-content-disposition"] = f'inline; filename="{filename}"'
-    if q:
-        glue = "&" if "?" in signed else "?"
-        signed = signed + glue + urlencode(q)
-
-    return signed
 
 
+# =========================
+# Logo da Base
+# =========================
 @login_required
-def baixar_anexo(request, pk):
-    anexo = get_object_or_404(Anexo.objects.select_related('base', 'conta'), pk=pk)
-    if not (request.user.is_superuser or request.user.bases.filter(pk=anexo.base_id).exists()):
-        return HttpResponseForbidden('Sem permissão para este anexo.')
+def logo_base(request, base_id: int):
+    base = get_object_or_404(Base, pk=base_id)
+    if not (request.user.is_superuser or request.user.bases.filter(pk=base_id).exists()):
+        return HttpResponseForbidden('Sem permissão para a logo desta base.')
 
-    rel_key = anexo.arquivo.name
-    if not rel_key:
-        messages.error(request, "Arquivo não encontrado para este anexo.")
-        return redirect('editar_conta', pk=anexo.conta_id)
+    if not base.logo:
+        return redirect(static('img/logo-default.png'))
 
-    abs_key = _rel_to_abs_key(rel_key)
-
-    filename = (anexo.nome_original or anexo.filename or "arquivo")
-    ctype    = (anexo.content_type or None)
-
-    try:
-        url = cloudfront_signed_url_with_inline(rel_key, 600, filename=filename, content_type=ctype)
-
-        if not url:
-            url = s3_presigned_url(abs_key, 600, filename=filename, content_type=ctype, inline=True)
-
-        return redirect(url)
-    except Exception as e:
-        logger.exception("Erro ao gerar URL do anexo %s: %s", pk, e)
-        messages.error(request, "Não foi possível gerar a URL do anexo.")
-        return redirect('editar_conta', pk=anexo.conta_id)
+    return redirect(base.logo.url)

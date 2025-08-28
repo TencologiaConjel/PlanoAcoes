@@ -8,14 +8,32 @@ from django.dispatch import receiver
 
 import os, mimetypes, uuid, re
 
+# ========= helpers de filename =========
+_filename_sanitize_re = re.compile(r"[^\w\-. ]+", re.UNICODE)
+def _safe_name(name: str) -> str:
+    base = os.path.basename(name or "")
+    base = _filename_sanitize_re.sub("_", base).strip() or "arquivo"
+    return base
 
 # ========= Base / Membership =========
+
+def base_logo_upload_to(instance, filename: str):
+    slug = getattr(instance, "slug", None) or slugify(getattr(instance, "nome", "") or "base")
+    return f"logos/{slug}/{uuid.uuid4().hex}_{_safe_name(filename)}"
 
 class Base(models.Model):
     nome = models.CharField(max_length=150, unique=True)
     slug = models.SlugField(unique=True)
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
+
+    # >>> força salvar logo no S3 (ou fallback, se seu S3PrivateMediaStorage tratar)
+    from .storages import S3PrivateMediaStorage
+    logo = models.ImageField(
+        storage=S3PrivateMediaStorage(),
+        upload_to=base_logo_upload_to,
+        null=True, blank=True, max_length=512
+    )
 
     users = models.ManyToManyField(
         settings.AUTH_USER_MODEL, through='Membership', related_name='bases', blank=True
@@ -65,12 +83,9 @@ class ContaQuerySet(models.QuerySet):
             return self
         return self.filter(base__in=user.bases.all())
 
-
 class Conta(models.Model):
-    # deixe null=True/blank=True enquanto faz o backfill; depois troque pra False numa migração final
     base = models.ForeignKey(Base, on_delete=models.CASCADE, related_name='contas',
                              null=True, blank=True)
-
     titulo = models.CharField(max_length=200, verbose_name='Título')
     descricao = models.TextField(verbose_name='Descrição')
     data = models.DateField(verbose_name='Data')
@@ -92,34 +107,25 @@ class Conta(models.Model):
 
 
 # ========= Anexo (S3 via django-storages) =========
-
 from .storages import S3PrivateMediaStorage  # <- seu storage do app
-
-_filename_sanitize_re = re.compile(r"[^\w\-. ]+", re.UNICODE)
-def _safe_name(name: str) -> str:
-    base = os.path.basename(name or "")
-    base = _filename_sanitize_re.sub("_", base).strip() or "arquivo"
-    return base
 
 def anexo_upload_to(instance, filename: str):
     """
-    Caminho organizado e único: anexos/<base>/conta_<id>/<YYYY/MM>/<uuid>_<nome>
-    Usa conta.base sempre que possível (inline formset preenche instance.conta).
+    Novo path: anexos/<base>/conta_<id>/<uuid>_<nome>
+    (menos pastas: removido YYYY/MM)
     """
     base = getattr(instance, "base", None)
     if not base and getattr(instance, "conta", None):
         base = instance.conta.base
     base_slug = getattr(base, "slug", "sem-base")
     conta_id = getattr(instance, "conta_id", None) or "sem"
-    return f"anexos/{base_slug}/conta_{conta_id}/{timezone.now():%Y/%m}/{uuid.uuid4().hex}_{_safe_name(filename)}"
-
+    return f"anexos/{base_slug}/conta_{conta_id}/{uuid.uuid4().hex}_{_safe_name(filename)}"
 
 class AnexoQuerySet(models.QuerySet):
     def for_user(self, user):
         if getattr(user, "is_superuser", False):
             return self
         return self.filter(base__in=user.bases.all())
-
 
 class Anexo(models.Model):
     base   = models.ForeignKey("Base", on_delete=models.CASCADE, related_name="anexos")
@@ -159,12 +165,13 @@ class Anexo(models.Model):
                 self.tamanho = self.arquivo.size
             except Exception:
                 pass
-        if not self.content_type and self.nome_original:
-            self.content_type = mimetypes.guess_type(self.nome_original)[0] or ""
+        if not self.content_type:
+            # tenta do upload; se não, usa mimetypes pelo nome
+            ct = getattr(self.arquivo, "content_type", "") or mimetypes.guess_type(self.nome_original or "")[0] or ""
+            self.content_type = ct
         if self.conta_id and not self.base_id:
             self.base = self.conta.base
         super().save(*args, **kwargs)
-
 
 
 @receiver(post_delete, sender=Anexo)
@@ -177,12 +184,8 @@ def _delete_file_on_instance_delete(sender, instance: Anexo, **kwargs):
     except Exception:
         pass
 
-
 @receiver(pre_save, sender=Anexo)
 def _delete_old_file_on_change(sender, instance: Anexo, **kwargs):
-    """
-    Se trocar o arquivo de um anexo existente, apaga o arquivo antigo no storage.
-    """
     if not instance.pk:
         return
     try:
