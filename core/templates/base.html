@@ -203,7 +203,6 @@
     <a class="navbar-brand fw-bold d-flex align-items-center gap-3" href="{% url 'dashboard' %}">
         {% with current_base=request.current_base|default:base_atual %}
             {% if current_base and current_base.id %}
-                <!-- Logo da base atual -->
                 <img
                     src="{% url 'logo_base' current_base.id %}"
                     alt="{{ current_base.nome }}"
@@ -211,8 +210,8 @@
                     data-base-name="{{ current_base.nome }}"
                     data-base-initial="{{ current_base.nome|first|upper }}"
                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                    style = "height: 60px; width: auto;"
                 >
-                <!-- Fallback: Placeholder com inicial da base -->
                 <div class="" style="display: none;">
                 </div>
                 <span>{{ current_base.nome }} - Prestação de Contas</span>
