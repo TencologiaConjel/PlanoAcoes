@@ -30,10 +30,9 @@
     </form>
     {% endif %}
   </div>
-</div>  {# fecha o cabeçalho #}
+</div>
 
 <style>
-/* ===== Timeline ===== */
 .timeline { position: relative; }
 .timeline-line{
   position:absolute; inset:0 auto 0 50%;
@@ -50,14 +49,20 @@
   box-shadow:0 0 0 4px rgba(31,74,168,.15);
   z-index:2;
 }
-
+.timeline-month {
+  position: relative; text-align: center; margin: 2.25rem 0 1rem; z-index: 3;
+}
+.timeline-month .month-chip {
+  display: inline-block; background: #eef2ff; color: #1f4aa8;
+  border: 1px solid #dbe2f7; padding: .35rem .85rem; border-radius: 999px;
+  font-weight: 700; text-transform: capitalize; box-shadow: 0 2px 6px rgba(31,74,168,.08);
+    font-size: 1.35rem; 
+}
 .timeline-date{
-  width: 6%;
-  position:absolute; top:50%;
-  font-size:.9rem; font-weight:600; color:#1f4aa8;
+  width: 11%; position:absolute; top:50%;
+  font-size:1.5em; font-weight:600; color:#1f4aa8;
   background:#fff; border:1px solid #dbe2f7;
-  border-radius:999px; padding:2px 10px;
-  box-shadow:0 2px 6px rgba(31,74,168,.08);
+  border-radius:999px; padding:2px 10px; box-shadow:0 2px 6px rgba(31,74,168,.08);
   line-height:1.2; white-space:nowrap; z-index:3;
 }
 .timeline-date.to-right{ left:calc(50% + 14px); transform:translate(0,-50%); text-align:left; }
@@ -73,186 +78,185 @@
 }
 .card .dropdown-toggle:focus{ outline: 2px solid #1f4aa8; outline-offset: 2px; }
 
-/* ===== Attachments (Anexos) ===== */
 .attachments { margin-top:.5rem; }
-.attachments-header {
-  display:flex; align-items:center; gap:.5rem; font-weight:600;
-  color:#1f4aa8; margin-bottom:.35rem;
-}
+.attachments-header { display:flex; align-items:center; gap:.5rem; font-weight:600; color:#1f4aa8; margin-bottom:.35rem; }
 .attachments-grid { display:flex; flex-wrap:wrap; gap:.5rem; }
 .attachment-pill {
   display:flex; align-items:center; gap:.5rem;
-  border:1px solid #dbe2f7; border-radius:999px;
-  padding:.35rem .6rem; background:#fff; text-decoration:none;
+  border:1px solid #dbe2f7; border-radius:999px; padding:.35rem .6rem; background:#fff; text-decoration:none;
 }
 .attachment-pill:hover { background:#f7f9ff; }
 .attachment-thumb {
   width:36px; height:36px; border-radius:8px; overflow:hidden;
-  display:flex; align-items:center; justify-content:center;
-  border:1px solid #eef2ff; font-size:1.1rem;
+  display:flex; align-items:center; justify-content:center; border:1px solid #eef2ff; font-size:1.1rem;
 }
 .attachment-meta { font-size:.8rem; color:#6c757d; }
-.badge-count {
-  background:#1f4aa8; color:#fff; border-radius:999px;
-  padding:.1rem .45rem; font-size:.75rem;
-}
+.badge-count { background:#1f4aa8; color:#fff; border-radius:999px; padding:.1rem .45rem; font-size:.75rem; }
 </style>
 
 <div class="timeline position-relative">
   <span class="timeline-line" aria-hidden="true"></span>
 
-  {% for conta in contas %}
-    <div class="row g-4 align-items-stretch timeline-row position-relative" data-index="{{ forloop.counter0 }}">
-      <span class="timeline-dot p-2" aria-hidden="true"></span>
+  {% for grupo in contas_grupos %}
 
-      {% if forloop.counter0|divisibleby:2 %}
-        <span class="timeline-date to-right ">{{ conta.data|date:"d/m/Y" }}</span>
-      {% else %}
-        <span class="timeline-date to-left">{{ conta.data|date:"d/m/Y" }}</span>
-      {% endif %}
+    {# cards do mês #}
+    {% for conta in grupo.contas %}
+      <div class="row g-4 align-items-stretch timeline-row position-relative" data-index="{{ forloop.counter0 }}">
+        <span class="timeline-dot p-2" aria-hidden="true"></span>
 
-      {% if forloop.counter0|divisibleby:2 %}
-        <div class="col-md-6">
-          <div class="card h-100 shadow-sm">
-            <div class="card-body">
-              <div class="d-flex align-items-start gap-3 mb-2">
-                <h5 class="card-title mb-0 fw-bold flex-grow-1">{{ conta.titulo }}</h5>
-                <div class="dropdown ms-auto">
-                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Ações">
-                    <i class="bi bi-three-dots" aria-hidden="true"></i>
-                  </button>
-                  <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="{% url 'editar_conta' conta.pk %}"><i class="bi bi-pencil me-2" aria-hidden="true"></i>Editar</a></li>
-                    <li><a class="dropdown-item text-danger" href="{% url 'excluir_conta' conta.pk %}"><i class="bi bi-trash me-2" aria-hidden="true"></i>Excluir</a></li>
-                  </ul>
-                </div>
-              </div>
+        {% if forloop.counter0|divisibleby:2 %}
+          <span class="timeline-date to-right ">{{ conta.data|date:"d/m/Y" }}</span>
+        {% else %}
+          <span class="timeline-date to-left">{{ conta.data|date:"d/m/Y" }}</span>
+        {% endif %}
 
-              {% if conta.descricao %}
-                <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
-              {% endif %}
-
-              {# ===== ANEXOS (lado esquerdo) ===== #}
-              {% with n=conta.anexos.count %}
-                {% if n %}
-                  <div class="attachments">
-                    <div class="attachments-header">
-                      <i class="bi bi-paperclip" aria-hidden="true"></i>
-                      Anexos
-                      {% if n > 1 %}
-                        <span class="badge-count" aria-label="{{ n }} anexos">{{ n }}</span>
-                      {% endif %}
-                    </div>
-
-                    <div class="attachments-grid">
-                      {% for an in conta.anexos.all %}
-                        {% with nome=an.nome_original|default:an.filename ct=an.content_type|default_if_none:"" %}
-                        <a href="{% url 'baixar_anexo' an.pk %}" class="attachment-pill" target="_blank" rel="noopener noreferrer">
-                          <span class="attachment-thumb">
-                            {% if ct and ct|slice:":6" == "image/" %}
-                              <i class="bi bi-file-image" aria-hidden="true"></i>
-                            {% elif ct == "application/pdf" %}
-                              <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
-                            {% else %}
-                              <i class="bi bi-file-earmark" aria-hidden="true"></i>
-                            {% endif %}
-                          </span>
-                          <span>
-                            <div class="fw-semibold text-truncate" style="max-width:220px">{{ nome }}</div>
-                            <div class="attachment-meta">
-                              {% if an.tamanho %}{{ an.tamanho|filesizeformat }} · {% endif %}
-                              {{ an.criado_em|date:"d/m/Y H:i" }}
-                            </div>
-                          </span>
-                        </a>
-                        {% endwith %}
-                      {% endfor %}
-                    </div>
+        {% if forloop.counter0|divisibleby:2 %}
+          <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+              <div class="card-body">
+                <div class="d-flex align-items-start gap-3 mb-2">
+                  <h5 class="card-title mb-0 fw-bold flex-grow-1">{{ conta.titulo }}</h5>
+                  <div class="dropdown ms-auto">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Ações">
+                      <i class="bi bi-three-dots" aria-hidden="true"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{% url 'editar_conta' conta.pk %}"><i class="bi bi-pencil me-2" aria-hidden="true"></i>Editar</a></li>
+                      <li><a class="dropdown-item text-danger" href="{% url 'excluir_conta' conta.pk %}"><i class="bi bi-trash me-2" aria-hidden="true"></i>Excluir</a></li>
+                    </ul>
                   </div>
-                {% endif %}
-              {% endwith %}
+                </div>
 
-              <small class="text-muted d-block mt-2">
-                <i class="bi bi-building me-1" aria-hidden="true"></i>{{ conta.base.nome|default:"(sem base)" }}
-                &middot;
-                <i class="bi bi-calendar-event ms-2 me-1" aria-hidden="true"></i>{{ conta.data|date:"d/m/Y" }}
-              </small>
+                {% if conta.descricao %}
+                  <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
+                {% endif %}
+
+                {% with n=conta.anexos.count %}
+                  {% if n %}
+                    <div class="attachments">
+                      <div class="attachments-header">
+                        <i class="bi bi-paperclip" aria-hidden="true"></i>
+                        Anexos
+                        {% if n > 1 %}<span class="badge-count" aria-label="{{ n }} anexos">{{ n }}</span>{% endif %}
+                      </div>
+
+                      <div class="attachments-grid">
+                        {% for an in conta.anexos.all %}
+                          {% with nome=an.nome_original|default:an.filename ct=an.content_type|default_if_none:"" %}
+                          <a href="{% url 'baixar_anexo' an.pk %}" class="attachment-pill" target="_blank" rel="noopener noreferrer">
+                            <span class="attachment-thumb">
+                              {% if ct and ct|slice:":6" == "image/" %}
+                                <i class="bi bi-file-image" aria-hidden="true"></i>
+                              {% elif ct == "application/pdf" %}
+                                <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
+                              {% else %}
+                                <i class="bi bi-file-earmark" aria-hidden="true"></i>
+                              {% endif %}
+                            </span>
+                            <span>
+                              <div class="fw-semibold text-truncate" style="max-width:220px">{{ nome }}</div>
+                              <div class="attachment-meta">
+                                {% if an.tamanho %}{{ an.tamanho|filesizeformat }} · {% endif %}
+                                {{ an.criado_em|date:"d/m/Y H:i" }}
+                              </div>
+                            </span>
+                          </a>
+                          {% endwith %}
+                        {% endfor %}
+                      </div>
+                    </div>
+                  {% endif %}
+                {% endwith %}
+
+                <small class="text-muted d-block mt-2">
+                  <i class="bi bi-building me-1" aria-hidden="true"></i>{{ conta.base.nome|default:"(sem base)" }}
+                  &middot;
+                  <i class="bi bi-calendar-event ms-2 me-1" aria-hidden="true"></i>{{ conta.data|date:"d/m/Y" }}
+                </small>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="col-md-6 d-none d-md-block"></div>
-      {% else %}
-        <div class="col-md-6 d-none d-md-block"></div>
-        <div class="col-md-6">
-          <div class="card h-100 shadow-sm">
-            <div class="card-body">
-              <div class="d-flex align-items-start gap-3 mb-2">
-                <h5 class="card-title mb-0 fw-bold flex-grow-1">{{ conta.titulo }}</h5>
-                <div class="dropdown ms-auto">
-                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Ações">
-                    <i class="bi bi-three-dots" aria-hidden="true"></i>
-                  </button>
-                  <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="{% url 'editar_conta' conta.pk %}"><i class="bi bi-pencil me-2" aria-hidden="true"></i>Editar</a></li>
-                    <li><a class="dropdown-item text-danger" href="{% url 'excluir_conta' conta.pk %}"><i class="bi bi-trash me-2" aria-hidden="true"></i>Excluir</a></li>
-                  </ul>
-                </div>
-              </div>
-
-              {% if conta.descricao %}
-                <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
-              {% endif %}
-
-              {# ===== ANEXOS (lado direito) ===== #}
-              {% with n=conta.anexos.count %}
-                {% if n %}
-                  <div class="attachments">
-                    <div class="attachments-header">
-                      <i class="bi bi-paperclip" aria-hidden="true"></i>
-                      Anexos
-                      {% if n > 1 %}
-                        <span class="badge-count" aria-label="{{ n }} anexos">{{ n }}</span>
-                      {% endif %}
-                    </div>
-
-                    <div class="attachments-grid">
-                      {% for an in conta.anexos.all %}
-                        {% with nome=an.nome_original|default:an.filename ct=an.content_type|default_if_none:"" %}
-                        <a href="{% url 'baixar_anexo' an.pk %}" class="attachment-pill">
-                          <span class="attachment-thumb">
-                            {% if ct and ct|slice:":6" == "image/" %}
-                              <i class="bi bi-file-image" aria-hidden="true"></i>
-                            {% elif ct == "application/pdf" %}
-                              <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
-                            {% else %}
-                              <i class="bi bi-file-earmark" aria-hidden="true"></i>
-                            {% endif %}
-                          </span>
-                          <span>
-                            <div class="fw-semibold text-truncate" style="max-width:220px">{{ nome }}</div>
-                            <div class="attachment-meta">
-                              {% if an.tamanho %}{{ an.tamanho|filesizeformat }} · {% endif %}
-                              {{ an.criado_em|date:"d/m/Y H:i" }}
-                            </div>
-                          </span>
-                        </a>
-                        {% endwith %}
-                      {% endfor %}
-                    </div>
+          <div class="col-md-6 d-none d-md-block"></div>
+        {% else %}
+          <div class="col-md-6 d-none d-md-block"></div>
+          <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+              <div class="card-body">
+                <div class="d-flex align-items-start gap-3 mb-2">
+                  <h5 class="card-title mb-0 fw-bold flex-grow-1">{{ conta.titulo }}</h5>
+                  <div class="dropdown ms-auto">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Ações">
+                      <i class="bi bi-three-dots" aria-hidden="true"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="{% url 'editar_conta' conta.pk %}"><i class="bi bi-pencil me-2" aria-hidden="true"></i>Editar</a></li>
+                      <li><a class="dropdown-item text-danger" href="{% url 'excluir_conta' conta.pk %}"><i class="bi bi-trash me-2" aria-hidden="true"></i>Excluir</a></li>
+                    </ul>
                   </div>
-                {% endif %}
-              {% endwith %}
+                </div>
 
-              <small class="text-muted d-block mt-2">
-                <i class="bi bi-building me-1" aria-hidden="true"></i>{{ conta.base.nome|default:"(sem base)" }}
-                &middot;
-                <i class="bi bi-calendar-event ms-2 me-1" aria-hidden="true"></i>{{ conta.data|date:"d/m/Y" }}
-              </small>
+                {% if conta.descricao %}
+                  <p class="text-muted mb-2 js-desc">{{ conta.descricao|safe }}</p>
+                {% endif %}
+
+                {% with n=conta.anexos.count %}
+                  {% if n %}
+                    <div class="attachments">
+                      <div class="attachments-header">
+                        <i class="bi bi-paperclip" aria-hidden="true"></i>
+                        Anexos
+                        {% if n > 1 %}<span class="badge-count" aria-label="{{ n }} anexos">{{ n }}</span>{% endif %}
+                      </div>
+
+                      <div class="attachments-grid">
+                        {% for an in conta.anexos.all %}
+                          {% with nome=an.nome_original|default:an.filename ct=an.content_type|default_if_none:"" %}
+                          <a href="{% url 'baixar_anexo' an.pk %}" class="attachment-pill">
+                            <span class="attachment-thumb">
+                              {% if ct and ct|slice:":6" == "image/" %}
+                                <i class="bi bi-file-image" aria-hidden="true"></i>
+                              {% elif ct == "application/pdf" %}
+                                <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
+                              {% else %}
+                                <i class="bi bi-file-earmark" aria-hidden="true"></i>
+                              {% endif %}
+                            </span>
+                            <span>
+                              <div class="fw-semibold text-truncate" style="max-width:220px">{{ nome }}</div>
+                              <div class="attachment-meta">
+                                {% if an.tamanho %}{{ an.tamanho|filesizeformat }} · {% endif %}
+                                {{ an.criado_em|date:"d/m/Y H:i" }}
+                              </div>
+                            </span>
+                          </a>
+                          {% endwith %}
+                        {% endfor %}
+                      </div>
+                    </div>
+                  {% endif %}
+                {% endwith %}
+
+                <small class="text-muted d-block mt-2">
+                  <i class="bi bi-building me-1" aria-hidden="true"></i>{{ conta.base.nome|default:"(sem base)" }}
+                  &middot;
+                  <i class="bi bi-calendar-event ms-2 me-1" aria-hidden="true"></i>{{ conta.data|date:"d/m/Y" }}
+                </small>
+              </div>
             </div>
           </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    
+    <div class="row">
+      <div class="col-12">
+        <div class="timeline-month" role="separator" aria-label="{{ grupo.label }}" ">
+          <span class="month-chip" style="width: 200px; height: auto;"><i class="bi bi-calendar3 me-1" aria-hidden="true"></i>{{ grupo.label }}</span>
         </div>
-      {% endif %}
+      </div>
     </div>
+
   {% empty %}
     <div class="text-center py-5">
       <div class="glass-card p-5 mx-auto" style="max-width: 500px;">

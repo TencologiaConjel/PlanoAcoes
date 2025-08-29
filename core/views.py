@@ -65,6 +65,17 @@ try:
 except Exception:  # libs ausentes em dev/local
     CloudFrontSigner = None
 
+from itertools import groupby
+
+def _group_by_month(qs):
+    """[{ 'label': '09/2025', 'contas': [Conta, ...] }, ...]"""
+    itens = list(qs.order_by('-data', '-criado_em'))
+    grupos = []
+    for key, it in groupby(itens, key=lambda c: c.data.strftime('%Y-%m')):
+        contas = list(it)
+        label = contas[0].data.strftime('%m/%Y')  # ex.: 09/2025
+        grupos.append({'label': label, 'contas': contas})
+    return grupos
 
 def _s3_client():
     return boto3.client(
@@ -175,10 +186,6 @@ def cloudfront_signed_url_with_inline(
     return signed
 
 
-# =============================================================================
-# Helpers de base/escopo
-# =============================================================================
-
 def _bases_do_usuario(user):
     try:
         return user.bases.all()
@@ -187,12 +194,6 @@ def _bases_do_usuario(user):
 
 
 def _resolver_base_para_request(request):
-    """
-    Define a base-alvo da requisição:
-      1) (superuser) ?base=<id> ou POST['base']
-      2) request.current_base (se middleware tiver setado)
-      3) primeira base do usuário
-    """
     if request.user.is_authenticated and request.user.is_superuser:
         base_id = request.POST.get('base') or request.GET.get('base')
         if base_id:
@@ -229,10 +230,6 @@ def _contas_queryset_para_dashboard(request):
     return qs.prefetch_related(Prefetch('anexos', queryset=anexos_qs)).order_by('-data', '-criado_em')
 
 
-# =============================================================================
-# Auth
-# =============================================================================
-
 def login_view(request):
     if request.method == 'POST':
         identificador = (request.POST.get('username') or '').strip()
@@ -265,17 +262,16 @@ def login_view(request):
     return render(request, 'login.html')
 
 
-# =============================================================================
-# App
-# =============================================================================
 
 @login_required
 def dashboard(request):
     base_atual = _resolver_base_para_request(request)
     contas = _contas_queryset_para_dashboard(request)
     bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
+    contas_grupos = _group_by_month(contas) 
     return render(request, 'dashboard.html', {
         'contas': contas,
+        'contas_grupos': contas_grupos,
         'base_atual': base_atual,
         'bases': bases,
     })
@@ -472,21 +468,14 @@ def powerbi(request):
 
 @login_required
 def logo_base(request, base_id: int):
-    """
-    Gera uma URL (CF assinada ou S3 presign) para a logo da Base e redireciona.
-    Assim a <img> no template recebe uma URL pública/temporária mesmo com bucket privado.
-    """
     base = get_object_or_404(Base, pk=base_id)
 
-    # checa acesso
     if not (request.user.is_superuser or request.user.bases.filter(pk=base_id).exists()):
         return HttpResponseForbidden('Sem permissão para a logo desta base.')
 
-    # sem logo -> imagem estática padrão
     if not base.logo:
         return redirect(static('img/logo-default.png'))
 
-    # chave relativa no storage (sem Origin Path)
     rel_key = base.logo.name
     abs_key = _rel_to_abs_key(rel_key)
 
@@ -504,16 +493,7 @@ def logo_base(request, base_id: int):
         return redirect(static('img/logo-default.png'))
 
 
-# =============================================================================
-# Context processor manual (opcional, se não usar um arquivo separado)
-# =============================================================================
-
 def base_context(request):
-    """
-    Fornece 'base_atual' e 'logo_url' para os templates.
-    Se estiver usando context processors em um arquivo próprio, pode mover esta função
-    pra lá e referenciar no settings.TEMPLATES['OPTIONS']['context_processors'].
-    """
     context = {}
     if request.user.is_authenticated:
         base_atual = _resolver_base_para_request(request)
@@ -525,3 +505,4 @@ def base_context(request):
         else:
             context['logo_url'] = static('img/logo-default.png')
     return context
+
