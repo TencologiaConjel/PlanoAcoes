@@ -134,3 +134,23 @@ DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
 
 
+# settings.py
+import os
+
+def _clean_domain(d):
+    if not d:
+        return None
+    d = str(d)
+    d = d.replace("\u200b", "").replace("\ufeff", "")
+    d = d.strip(" \t\r\n'\"").lstrip("= ")
+    d = d.replace("https://", "").replace("http://", "").strip("/")
+    return d.split("/")[0] if d else None
+
+RAW_CF = os.getenv("AWS_CLOUDFRONT_DOMAIN") or ""
+AWS_CLOUDFRONT_DOMAIN = _clean_domain(RAW_CF)
+
+import logging
+logging.getLogger(__name__).warning(
+    "CF domain raw=%r sanitized=%r",
+    RAW_CF, AWS_CLOUDFRONT_DOMAIN
+)

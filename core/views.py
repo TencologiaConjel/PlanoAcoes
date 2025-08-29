@@ -1,42 +1,68 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.contrib.auth import authenticate, login, get_user_model
-from django.contrib.auth.decorators import login_required
-from django.core.validators import validate_email
-from django.core.exceptions import ValidationError
-from django.http import JsonResponse, HttpResponseForbidden
-from django.db.models import Prefetch
+# views.py
+from __future__ import annotations
+
+import base64
+import logging
+import mimetypes
+import os
+from urllib.parse import urlencode
+
+import boto3
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import authenticate, get_user_model, login
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.db.models import Prefetch
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 
-from .models import Conta, Base, Anexo
 from .forms import ContaForm
-
-import os, base64, logging, mimetypes
-import boto3
-from urllib.parse import urlencode
+from .models import Anexo, Base, Conta
 
 logger = logging.getLogger(__name__)
 
-# =========================
-# AWS / CloudFront settings
-# =========================
-AWS_BUCKET       = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
-AWS_REGION       = getattr(settings, "AWS_S3_REGION_NAME", "sa-east-1")
-AWS_S3_LOCATION  = (getattr(settings, "AWS_S3_LOCATION", "") or os.getenv("AWS_S3_LOCATION", "") or "").strip("/")
+# =============================================================================
+# AWS / CloudFront
+# =============================================================================
 
-CF_DOMAIN        = getattr(settings, "AWS_CLOUDFRONT_DOMAIN", None) or os.getenv("AWS_CLOUDFRONT_DOMAIN")
-CF_KEY_ID        = getattr(settings, "CLOUDFRONT_KEY_ID", None) or os.getenv("CLOUDFRONT_KEY_ID")
-CF_PRIV_B64      = getattr(settings, "CLOUDFRONT_PRIVATE_KEY_B64", None) or os.getenv("CLOUDFRONT_PRIVATE_KEY_B64")
-CF_PRIV_PEM      = getattr(settings, "CLOUDFRONT_PRIVATE_KEY", None) or os.getenv("CLOUDFRONT_PRIVATE_KEY")
+def _clean_domain(d: str | None) -> str | None:
+    """
+    Sanitiza o host do CloudFront:
+    - remove caracteres invisíveis/BOM
+    - descarta espaços, '=' e aspas
+    - remove 'https?://'
+    - remove barras finais
+    """
+    if not d:
+        return None
+    d = str(d)
+    d = d.replace("\u200b", "").replace("\ufeff", "")  # zero-width/BOM
+    d = d.strip(" \t\r\n'\"").lstrip("= ")
+    d = d.replace("https://", "").replace("http://", "").strip("/")
+    return d.split("/")[0] if d else None
 
-S3_ANEXOS_ROOT   = getattr(settings, "S3_ANEXOS_ROOT", "anexos_v2")
+
+AWS_BUCKET      = getattr(settings, "AWS_STORAGE_BUCKET_NAME", None)
+AWS_REGION      = getattr(settings, "AWS_S3_REGION_NAME", "sa-east-1")
+AWS_S3_LOCATION = (getattr(settings, "AWS_S3_LOCATION", "") or "").strip("/")
+
+CF_DOMAIN_RAW = getattr(settings, "AWS_CLOUDFRONT_DOMAIN", None)
+CF_DOMAIN     = _clean_domain(CF_DOMAIN_RAW)
+
+CF_KEY_ID   = getattr(settings, "CLOUDFRONT_KEY_ID", None)
+CF_PRIV_B64 = getattr(settings, "CLOUDFRONT_PRIVATE_KEY_B64", None)
+CF_PRIV_PEM = getattr(settings, "CLOUDFRONT_PRIVATE_KEY", None)
+
+S3_ANEXOS_ROOT = getattr(settings, "S3_ANEXOS_ROOT", "anexos_v2")
 
 try:
     from botocore.signers import CloudFrontSigner
-    from cryptography.hazmat.primitives import serialization, hashes
+    from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-except Exception:
+except Exception:  # libs ausentes em dev/local
     CloudFrontSigner = None
 
 
@@ -51,12 +77,17 @@ def _s3_client():
 
 _CF_SIGNER = None
 def _get_cf_signer():
-    """Retorna CloudFrontSigner se houver DOMAIN + KEY_ID + PRIVATE_KEY."""
+    """Cria/retorna o signer do CloudFront se houver config válida."""
     global _CF_SIGNER
     if _CF_SIGNER is not None:
         return _CF_SIGNER
+
     if not (CF_DOMAIN and CF_KEY_ID and (CF_PRIV_PEM or CF_PRIV_B64) and CloudFrontSigner):
         _CF_SIGNER = None
+        if CF_DOMAIN:
+            logger.info("CloudFront sem assinatura (chave não configurada). Usando domínio %s", CF_DOMAIN)
+        else:
+            logger.info("CF_DOMAIN ausente. Fallback para S3 presign.")
         return None
 
     pem = CF_PRIV_PEM
@@ -68,11 +99,12 @@ def _get_cf_signer():
         return key.sign(message, padding.PKCS1v15(), hashes.SHA1())
 
     _CF_SIGNER = CloudFrontSigner(CF_KEY_ID, rsa_signer)
+    logger.info("CloudFront signer inicializado para domínio %s", CF_DOMAIN)
     return _CF_SIGNER
 
 
 def _rel_to_abs_key(rel_key: str) -> str:
-    """Converte chave RELATIVA (FileField.name) em chave ABSOLUTA do S3 aplicando Origin Path, se houver."""
+    """Converte chave RELATIVA em chave ABSOLUTA aplicando Origin Path (se houver)."""
     return f"{AWS_S3_LOCATION}/{rel_key}" if AWS_S3_LOCATION else rel_key
 
 
@@ -84,7 +116,7 @@ def s3_presigned_url(
     content_type: str | None = None,
     inline: bool = True,
 ) -> str:
-    """URL pré-assinada do S3 com Content-Disposition/Type opcionais."""
+    """URL pré-assinada (S3) com Content-Disposition/Type opcionais."""
     params = {"Bucket": AWS_BUCKET, "Key": abs_key}
     if inline:
         dispo = 'inline'
@@ -109,15 +141,17 @@ def cloudfront_signed_url_with_inline(
     content_type: str | None = None,
 ) -> str | None:
     """
-    Gera URL CF assinada e acrescenta query para inline se sua distribuição
-    encaminhar response-content-* ao S3.
+    Gera URL do CloudFront (assinada se chave configurada).
+    Se a distribuição encaminha as query params ao S3, inclui response-content-*.
     """
     if not CF_DOMAIN:
         return None
 
     base_url = f"https://{CF_DOMAIN}/{rel_key}"
     signer = _get_cf_signer()
+
     if not signer:
+        # Distribuição pública (sem assinatura)
         q = {}
         if content_type:
             q["response-content-type"] = content_type
@@ -141,9 +175,10 @@ def cloudfront_signed_url_with_inline(
     return signed
 
 
-# =========================
+# =============================================================================
 # Helpers de base/escopo
-# =========================
+# =============================================================================
+
 def _bases_do_usuario(user):
     try:
         return user.bases.all()
@@ -152,6 +187,12 @@ def _bases_do_usuario(user):
 
 
 def _resolver_base_para_request(request):
+    """
+    Define a base-alvo da requisição:
+      1) (superuser) ?base=<id> ou POST['base']
+      2) request.current_base (se middleware tiver setado)
+      3) primeira base do usuário
+    """
     if request.user.is_authenticated and request.user.is_superuser:
         base_id = request.POST.get('base') or request.GET.get('base')
         if base_id:
@@ -172,7 +213,8 @@ def _resolver_base_para_request(request):
 
 def _contas_queryset_para_dashboard(request):
     anexos_qs = Anexo.objects.only(
-        'id', 'arquivo', 'nome_original', 'content_type', 'tamanho', 'criado_em', 'conta_id', 'base_id'
+        'id', 'arquivo', 'nome_original', 'content_type', 'tamanho',
+        'criado_em', 'conta_id', 'base_id'
     )
 
     if request.user.is_superuser:
@@ -187,9 +229,10 @@ def _contas_queryset_para_dashboard(request):
     return qs.prefetch_related(Prefetch('anexos', queryset=anexos_qs)).order_by('-data', '-criado_em')
 
 
-# =========================
+# =============================================================================
 # Auth
-# =========================
+# =============================================================================
+
 def login_view(request):
     if request.method == 'POST':
         identificador = (request.POST.get('username') or '').strip()
@@ -215,17 +258,17 @@ def login_view(request):
             if user_auth is not None:
                 login(request, user_auth)
                 return redirect('dashboard')
-            else:
-                messages.error(request, 'Senha incorreta.')
+            messages.error(request, 'Senha incorreta.')
         else:
             messages.error(request, 'Usuário não encontrado.')
 
     return render(request, 'login.html')
 
 
-# =========================
+# =============================================================================
 # App
-# =========================
+# =============================================================================
+
 @login_required
 def dashboard(request):
     base_atual = _resolver_base_para_request(request)
@@ -358,7 +401,7 @@ def baixar_anexo(request, pk):
         return redirect('editar_conta', pk=anexo.conta_id)
 
     abs_key  = _rel_to_abs_key(rel_key)
-    filename = (anexo.nome_original or anexo.filename or "arquivo")
+    filename = (anexo.nome_original or os.path.basename(rel_key) or "arquivo")
     ctype    = (anexo.content_type or mimetypes.guess_type(filename)[0] or None)
 
     try:
@@ -427,12 +470,14 @@ def powerbi(request):
     return render(request, "powerbi.html", ctx)
 
 
-# views.py
-from django.templatetags.static import static
-
 @login_required
 def logo_base(request, base_id: int):
+    """
+    Gera uma URL (CF assinada ou S3 presign) para a logo da Base e redireciona.
+    Assim a <img> no template recebe uma URL pública/temporária mesmo com bucket privado.
+    """
     base = get_object_or_404(Base, pk=base_id)
+
     # checa acesso
     if not (request.user.is_superuser or request.user.bases.filter(pk=base_id).exists()):
         return HttpResponseForbidden('Sem permissão para a logo desta base.')
@@ -446,8 +491,8 @@ def logo_base(request, base_id: int):
     abs_key = _rel_to_abs_key(rel_key)
 
     filename = os.path.basename(rel_key)
-    ctype = getattr(base.logo, "file", None)
-    ctype = getattr(ctype, "content_type", None) or mimetypes.guess_type(filename)[0] or "image/png"
+    ctype = getattr(getattr(base.logo, "file", None), "content_type", None) \
+            or mimetypes.guess_type(filename)[0] or "image/png"
 
     try:
         url = cloudfront_signed_url_with_inline(rel_key, 600, filename=filename, content_type=ctype)
@@ -459,23 +504,24 @@ def logo_base(request, base_id: int):
         return redirect(static('img/logo-default.png'))
 
 
+# =============================================================================
+# Context processor manual (opcional, se não usar um arquivo separado)
+# =============================================================================
 
-# Context processor para disponibilizar a logo em todos os templates
 def base_context(request):
     """
-    Context processor para adicionar informações da base atual em todos os templates
+    Fornece 'base_atual' e 'logo_url' para os templates.
+    Se estiver usando context processors em um arquivo próprio, pode mover esta função
+    pra lá e referenciar no settings.TEMPLATES['OPTIONS']['context_processors'].
     """
     context = {}
-    
     if request.user.is_authenticated:
         base_atual = _resolver_base_para_request(request)
         context['base_atual'] = base_atual
-        
-        # URL da logo se existir
+
         if base_atual and base_atual.logo:
             from django.urls import reverse
             context['logo_url'] = reverse('logo_base', args=[base_atual.id])
         else:
             context['logo_url'] = static('img/logo-default.png')
-    
     return context
