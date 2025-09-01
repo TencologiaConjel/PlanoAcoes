@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Dashboard Financeiro{% endblock %}
+{% block title %}{{ base.nome|default:"Dashboard Financeiro" }}{% endblock %}
 
 {% block content %}
 <div class="pbiX-root" id="pbiX-root-financeiro">
   <div class="pbiX-head">
-    <h1 class="pbiX-title">Dashboard Financeiro</h1>
-    <div class="pbiX-actions">
-      {% if back_url %}<a class="pbiX-btn pbiX-btn--ghost" href="{%url 'dashboard'%}">← Voltar</a>{% endif %}
-      <button class="pbiX-btn" type="button" data-pbix-fs>⛶ Tela cheia</button>
-    </div>
+    <h1 class="pbiX-title">
+      {{ base.nome|default:"Dashboard Financeiro" }}
+      <small class="pbiX-subtitle">Power BI</small>
+    </h1>
+    <button class="pbiX-btn" type="button" data-pbix-fs aria-label="Alternar tela cheia">⛶ Tela cheia</button>
   </div>
 
   <div class="pbiX-card">
@@ -22,16 +22,16 @@
       <iframe
         class="pbiX-frame"
         src="{{ powerbi_url }}"
-        title="Power BI"
+        title="Power BI — {{ base.nome|default:'Dashboard' }}"
         allow="fullscreen; clipboard-write; encrypted-media"
         allowfullscreen
-        loading="lazy"
+        referrerpolicy="strict-origin-when-cross-origin"
         data-pbix-frame
       ></iframe>
       {% else %}
       <div class="pbiX-empty">
-        <strong>URL do Power BI não configurada.</strong><br/>
-        Informe <code>powerbi_url</code> ao renderizar a view.
+        <strong>URL do Power BI não configurada para esta base.</strong><br/>
+        Cadastre o campo <code>powerbi_url</code> no modelo da base ou forneça no contexto da view.
       </div>
       {% endif %}
     </div>
@@ -41,48 +41,87 @@
 <style>
 .pbiX-root{--pbiX-max:1280px;--pbiX-radius:12px;--pbiX-shadow:0 6px 20px rgba(0,0,0,.08)}
 .pbiX-head{display:flex;align-items:center;gap:12px;justify-content:space-between;max-width:var(--pbiX-max);margin:8px auto 10px;padding:0 8px}
-.pbiX-title{margin:0;font-weight:700;font-size:clamp(1.15rem,2.2vw,1.6rem);color:#223}
-.pbiX-actions{display:flex;gap:8px}
+.pbiX-title{margin:0;font-weight:700;font-size:clamp(1.15rem,2.2vw,1.6rem);color:#223;display:flex;align-items:baseline;gap:.5rem}
+.pbiX-subtitle{font-weight:600;color:#526;opacity:.6;font-size:.9rem}
+.pbiX-actions{display:flex;gap:8px;flex-wrap:wrap}
 .pbiX-btn{border:0;border-radius:10px;padding:8px 12px;background:#2f5bb3;color:#fff;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .pbiX-btn--ghost{background:transparent;color:#2f5bb3;border:1px solid #2f5bb3}
 .pbiX-btn:hover{filter:brightness(.95)}
 .pbiX-card{max-width:var(--pbiX-max);margin:0 auto;padding:0 8px}
 .pbiX-area{position:relative;height:clamp(520px,78vh,92vh);background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:var(--pbiX-radius);box-shadow:var(--pbiX-shadow);overflow:hidden}
 .pbiX-frame{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:#f6f7fb}
-.pbiX-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,.9));z-index:2}
+.pbiX-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,.9));z-index:2;transition:opacity .25s ease}
+.pbiX-loading.is-hidden{opacity:0;pointer-events:none}
 .pbiX-spinner{width:42px;height:42px;border:4px solid #e6ebf5;border-top:4px solid #2f5bb3;border-radius:50%;animation:pbiX-spin 1s linear infinite}
 .pbiX-muted{color:#6b7280;font-size:.95rem}
 .pbiX-empty{display:grid;place-items:center;min-height:360px;color:#6b7280;padding:24px;text-align:center}
 @keyframes pbiX-spin{to{transform:rotate(360deg)}}
 :fullscreen .pbiX-area{height:100vh}
-@media (max-width:768px){.pbiX-area{height:70vh}}
+@media (max-width:768px){
+  .pbiX-area{height:70vh}
+  .pbiX-head{align-items:flex-start}
+}
 </style>
 
 <script>
 (function(){
-  const root  = document.getElementById('pbiX-root-financeiro')
-  const area  = root.querySelector('[data-pbix-area]')
-  const btnFS = root.querySelector('[data-pbix-fs]')
-  const frame = root.querySelector('[data-pbix-frame]')
-  const wait  = root.querySelector('[data-pbix-loading]')
+  const root  = document.getElementById('pbiX-root-financeiro');
+  if(!root) return;
+
+  const area  = root.querySelector('[data-pbix-area]');
+  const btnFS = root.querySelector('[data-pbix-fs]');
+  const frame = root.querySelector('[data-pbix-frame]');
+  const wait  = root.querySelector('[data-pbix-loading]');
+
+  // ---- esconder loader com segurança (múltiplos fallbacks) ----
+  function hideWait(){
+    if(!wait || wait.classList.contains('is-hidden')) return;
+    wait.classList.add('is-hidden');
+    setTimeout(()=>{ if(wait) wait.style.display='none'; }, 300);
+  }
 
   if(frame){
-    frame.addEventListener('load', ()=>{ wait && (wait.style.display='none') })
-    setTimeout(()=>{ wait && (wait.style.display='none') }, 6000)
+    frame.addEventListener('load', hideWait, { once:true });
+    frame.addEventListener('error', hideWait, { once:true });
+
+    // Fallback duro: some após 10s mesmo que o load não venha
+    setTimeout(hideWait, 10000);
+
+    // Polling leve: se o iframe já estiver visível/renderizado, some o loader
+    const iv = setInterval(()=>{
+      const r = frame.getBoundingClientRect();
+      if(r.width > 0 && r.height > 0){
+        hideWait();
+        clearInterval(iv);
+      }
+    }, 800);
+
+    // Entrou/saíu de fullscreen? some o loader também
+    document.addEventListener('fullscreenchange', hideWait);
   }
+
+  // ---- fullscreen ----
   async function toggleFS(){
     try{
       if(!document.fullscreenElement){
-        await area.requestFullscreen(); btnFS.textContent='↩ Sair'
+        await area.requestFullscreen();
+        if(btnFS) btnFS.textContent='↩ Sair';
       }else{
-        await document.exitFullscreen(); btnFS.textContent='⛶ Tela cheia'
+        await document.exitFullscreen();
+        if(btnFS) btnFS.textContent='⛶ Tela cheia';
       }
     }catch(e){
-      area.style.height = area.style.height.includes('100vh') ? '78vh' : '100vh'
+      // fallback: alterna altura se fullscreen não for permitido
+      area.style.height = area.style.height.includes('100vh') ? '78vh' : '100vh';
     }
   }
-  btnFS && btnFS.addEventListener('click', toggleFS)
-  document.addEventListener('fullscreenchange', ()=>{ btnFS.textContent = document.fullscreenElement ? '↩ Sair' : '⛶ Tela cheia' })
+
+  if(btnFS){
+    btnFS.addEventListener('click', toggleFS);
+    document.addEventListener('fullscreenchange', ()=>{
+      if(btnFS) btnFS.textContent = document.fullscreenElement ? '↩ Sair' : '⛶ Tela cheia';
+    });
+  }
 })();
 </script>
 {% endblock %}

@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.urls import path, include
 from core import views
 
+namespace='core'
+
 urlpatterns = [
     path('', views.login_view, name='login'),
     path('dashboard/', views.dashboard, name='dashboard'),
@@ -13,4 +15,8 @@ urlpatterns = [
     path('anexos/<int:pk>/baixar/', views.baixar_anexo, name='baixar_anexo'),
     path('anexos/<int:pk>/excluir/', views.excluir_anexo, name='excluir_anexo'),
     path('bases/<int:base_id>/logo/', views.logo_base, name='logo_base'),
+    path("dashboards/", views.powerbi_index, name="powerbi_index"),
+    path("dashboards/<slug:slug>/", views.powerbi_base, name="powerbi_base"),
 ]
+
+

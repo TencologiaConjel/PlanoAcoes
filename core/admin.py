@@ -7,21 +7,12 @@ from .models import Base, Membership, Conta
 
 User = get_user_model()
 
-
-# ===========================
-# Inlines
-# ===========================
 class MembershipInline(admin.TabularInline):
     model = Membership
     fk_name = "user"
     extra = 0
     autocomplete_fields = ["base"]
 
-
-# ===========================
-# User
-# ===========================
-# Desregistra o User padrão (se já estiver registrado)
 try:
     admin.site.unregister(User)
 except admin.sites.NotRegistered:
@@ -51,20 +42,14 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ("username", "email")
 
 
-# ===========================
-# Base
-# ===========================
 @admin.register(Base)
 class BaseAdmin(admin.ModelAdmin):
     list_display = ("nome", "slug", "ativo", "criado_em")
     list_filter = ("ativo",)
-    search_fields = ("nome", "slug")
+    search_fields = ("nome", "slug","powerbi_url")
     prepopulated_fields = {"slug": ("nome",)}
 
 
-# ===========================
-# Membership
-# ===========================
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin):
     list_display = ("user", "base", "role", "joined_at")

@@ -130,12 +130,8 @@ AWS_QUERYSTRING_AUTH = False
 # Storage padrão em S3
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 
-# MEDIA_URL saindo pela CloudFront
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
 
-
-# settings.py
-import os
 
 def _clean_domain(d):
     if not d:

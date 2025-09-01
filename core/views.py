@@ -18,6 +18,7 @@ from django.db.models import Prefetch
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
+from django.urls import reverse  # <— use global
 
 from .forms import ContaForm
 from .models import Anexo, Base, Conta
@@ -254,7 +255,7 @@ def login_view(request):
             user_auth = authenticate(request, username=user.username, password=senha)
             if user_auth is not None:
                 login(request, user_auth)
-                return redirect('dashboard')
+                return redirect('dashboard')  
             messages.error(request, 'Senha incorreta.')
         else:
             messages.error(request, 'Usuário não encontrado.')
@@ -262,13 +263,12 @@ def login_view(request):
     return render(request, 'login.html')
 
 
-
 @login_required
 def dashboard(request):
     base_atual = _resolver_base_para_request(request)
     contas = _contas_queryset_para_dashboard(request)
     bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
-    contas_grupos = _group_by_month(contas) 
+    contas_grupos = _group_by_month(contas)
     return render(request, 'dashboard.html', {
         'contas': contas,
         'contas_grupos': contas_grupos,
@@ -303,7 +303,7 @@ def cadastrar_conta(request):
                         uploaded_by=request.user,
                     )
                 messages.success(request, f'Conta "{conta.titulo}" cadastrada com sucesso!')
-                return redirect('dashboard')
+                return redirect('dashboard')  
         else:
             messages.error(request, 'Erro ao cadastrar conta. Verifique os dados informados.')
     else:
@@ -346,7 +346,7 @@ def editar_conta(request, pk):
                 )
 
             messages.success(request, f'Conta "{obj.titulo}" atualizada com sucesso!')
-            return redirect('dashboard')
+            return redirect('dashboard')  
         else:
             messages.error(request, 'Erro ao atualizar conta. Verifique os dados informados.')
     else:
@@ -378,7 +378,7 @@ def excluir_conta(request, pk):
 
         conta.delete()
         messages.success(request, f'Conta "{titulo_conta}" excluída com sucesso!')
-        return redirect('dashboard')
+        return redirect('dashboard')  
 
     bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
     return render(request, 'excluir.html', {'conta': conta, 'bases': bases, 'base_atual': base_atual})
@@ -394,7 +394,7 @@ def baixar_anexo(request, pk):
     rel_key = anexo.arquivo.name
     if not rel_key:
         messages.error(request, "Arquivo não encontrado para este anexo.")
-        return redirect('editar_conta', pk=anexo.conta_id)
+        return redirect('editar_conta', pk=anexo.conta_id) 
 
     abs_key  = _rel_to_abs_key(rel_key)
     filename = (anexo.nome_original or os.path.basename(rel_key) or "arquivo")
@@ -407,7 +407,7 @@ def baixar_anexo(request, pk):
     except Exception as e:
         logger.exception("Erro ao gerar URL do anexo %s: %s", pk, e)
         messages.error(request, "Não foi possível gerar a URL do anexo.")
-        return redirect('editar_conta', pk=anexo.conta_id)
+        return redirect('editar_conta', pk=anexo.conta_id)  
 
 
 @login_required
@@ -425,7 +425,7 @@ def excluir_anexo(request, pk):
             logger.warning("Falha ao deletar arquivo do S3 (anexo %s): %s", pk, e)
         anexo.delete()
         messages.success(request, 'Anexo excluído.')
-    return redirect('editar_conta', pk=conta_id)
+    return redirect('editar_conta', pk=conta_id) 
 
 
 @login_required
@@ -450,20 +450,70 @@ def api_contas_json(request):
     return JsonResponse({'contas': contas_list})
 
 
+# --- helpers de permissão -----------------------------------------------------
+def _user_can_access_base(user, base: Base) -> bool:
+    if not base:
+        return False
+    return bool(user.is_superuser or user.bases.filter(pk=base.pk).exists())
+
+# --- Power BI: lista e detalhe por base --------------------------------------
+@login_required
+def powerbi_index(request):
+    """
+    Lista as bases acessíveis ao usuário. Se houver apenas 1, redireciona direto.
+    """
+    if request.user.is_superuser:
+        bases = Base.objects.filter(ativo=True).order_by("nome")
+    else:
+        bases = _bases_do_usuario(request.user).filter(ativo=True).order_by("nome")
+
+    if bases.count() == 1:
+        base = bases.first()
+        return redirect("powerbi_base", slug=base.slug)  # <— namespace
+
+    return render(request, "powerbi_index.html", {
+        "bases": bases,
+        "base_atual": _resolver_base_para_request(request),
+    })
+
+
+@login_required
+def powerbi_base(request, slug: str):
+    base = get_object_or_404(Base, slug=slug, ativo=True)
+
+    if not _user_can_access_base(request.user, base):
+        return HttpResponseForbidden("Sem permissão para esta base.")
+
+    powerbi_url = (base.powerbi_url or getattr(settings, "POWERBI_URL", "")).strip()
+
+    ctx = {
+        "base": base,
+        "powerbi_url": powerbi_url,
+        "back_url": reverse('powerbi_index'),  
+        "base_atual": base,
+        "bases": Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user),
+    }
+    return render(request, "powerbi.html", ctx)
+
+
 @login_required
 def powerbi(request):
     base_atual = _resolver_base_para_request(request)
-    bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
 
-    url = ("https://app.powerbi.com/view?"
-           "r=eyJrIjoiM2JlODRjN2QtYTUwMC00NjIwLTk3MjEtOGFlMmRlMTBmNTExIiwidCI6ImJmODhhNDU2LTQwZTctNDg5OC1hYmMwLWUwNmM0MWVmZTliOCJ9")
-    ctx = {
-        "powerbi_url": url,
-        "back_url": "/",
-        "base_atual": base_atual,
-        "bases": bases,
-    }
-    return render(request, "powerbi.html", ctx)
+    if request.user.is_superuser:
+        base_id = request.GET.get("base")
+        if base_id:
+            base_qs = Base.objects.filter(pk=base_id, ativo=True)
+            if base_qs.exists():
+                base_atual = base_qs.first()
+
+    if not base_atual:
+        return redirect("powerbi_index")  
+
+    if not _user_can_access_base(request.user, base_atual):
+        return HttpResponseForbidden("Sem permissão para esta base.")
+
+    return redirect("powerbi_base", slug=base_atual.slug)  
 
 
 @login_required
@@ -500,9 +550,7 @@ def base_context(request):
         context['base_atual'] = base_atual
 
         if base_atual and base_atual.logo:
-            from django.urls import reverse
-            context['logo_url'] = reverse('logo_base', args=[base_atual.id])
+            context['logo_url'] = reverse('logo_base', args=[base_atual.id])  # <— namespace
         else:
             context['logo_url'] = static('img/logo-default.png')
     return context
-

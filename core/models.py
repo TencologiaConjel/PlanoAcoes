@@ -39,8 +39,8 @@ class Base(models.Model):
     slug = models.SlugField(unique=True)
     ativo = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
+    powerbi_url = models.URLField("URL de incorporação do Power BI", max_length=800)
 
-    # Logo privada no S3 (entregue via CloudFront assinada)
     logo = models.ImageField(
         storage=S3PrivateMediaStorage(),
         upload_to=base_logo_upload_to,

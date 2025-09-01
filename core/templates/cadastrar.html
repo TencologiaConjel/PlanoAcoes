@@ -260,7 +260,6 @@ document.addEventListener('DOMContentLoaded', function() {
     input.value = '';
   });
 
-  // Drag & Drop
   ['dragenter','dragover'].forEach(ev =>
     dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('border-primary'); })
   );
@@ -272,14 +271,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (files.length) addFiles(files);
   });
 
-  // ===== Submit final: sincroniza anexos + valida campos obrigatórios =====
   form.addEventListener('submit', function(e) {
     if (tinymce?.triggerSave) tinymce.triggerSave();
 
-    // sincroniza a lista acumulada no input real
     input.files = dt.files;
 
-    // valida campos obrigatórios
     const titulo = document.querySelector('input[name="titulo"]')?.value || '';
     const descricao = document.querySelector('textarea[name="descricao"]')?.value || '';
     const data = document.querySelector('input[name="data"]')?.value || '';
