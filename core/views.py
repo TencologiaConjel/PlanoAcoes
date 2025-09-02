@@ -18,16 +18,12 @@ from django.db.models import Prefetch
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
-from django.urls import reverse  # <— use global
+from django.urls import reverse 
 
 from .forms import ContaForm
 from .models import Anexo, Base, Conta
 
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# AWS / CloudFront
-# =============================================================================
 
 def _clean_domain(d: str | None) -> str | None:
     """

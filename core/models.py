@@ -6,25 +6,17 @@ from django.utils.text import slugify
 from django.utils import timezone
 from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
-
 import os
 import mimetypes
 import uuid
 import re
-
-# Storage privado (o mesmo usado nos anexos)
 from .storages import S3PrivateMediaStorage
 
-
-# ========= helpers de filename =========
 _filename_sanitize_re = re.compile(r"[^\w\-. ]+", re.UNICODE)
 def _safe_name(name: str) -> str:
     base = os.path.basename(name or "")
     base = _filename_sanitize_re.sub("_", base).strip() or "arquivo"
     return base
-
-
-# ========= Base / Membership =========
 
 def base_logo_upload_to(instance, filename: str):
     """
@@ -88,9 +80,6 @@ class Membership(models.Model):
     def __str__(self):
         return f'{self.user} @ {self.base} ({self.role})'
 
-
-# ========= Conta =========
-
 class ContaQuerySet(models.QuerySet):
     def for_user(self, user):
         if getattr(user, 'is_superuser', False):
@@ -120,9 +109,6 @@ class Conta(models.Model):
 
     def __str__(self):
         return self.titulo
-
-
-# ========= Anexo (S3 via django-storages) =========
 
 def anexo_upload_to(instance, filename: str):
     """
@@ -244,9 +230,6 @@ def _delete_logo_on_base_delete(sender, instance: Base, **kwargs):
 
 @receiver(pre_save, sender=Base)
 def _delete_old_logo_on_change(sender, instance: Base, **kwargs):
-    """
-    Se trocar a logo de uma Base existente, apaga o arquivo antigo no storage.
-    """
     if not instance.pk:
         return
     try:

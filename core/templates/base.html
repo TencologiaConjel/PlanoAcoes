@@ -246,11 +246,6 @@
             <i class="bi bi-clock-history me-1"></i>Histórico
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.url_name == 'cadastrar_conta' %}active{% endif %}" href="{% url 'cadastrar_conta' %}">
-            <i class="bi bi-plus-circle me-1"></i>Nova Conta
-          </a>
-        </li>
         
         {% if request.user.is_superuser %}
         <li class="nav-item dropdown">
