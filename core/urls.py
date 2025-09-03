@@ -17,6 +17,8 @@ urlpatterns = [
     path('bases/<int:base_id>/logo/', views.logo_base, name='logo_base'),
     path("dashboards/", views.powerbi_index, name="powerbi_index"),
     path("dashboards/<slug:slug>/", views.powerbi_base, name="powerbi_base"),
+    path('painel/', views.painel_transparencia, name='painel_transparencia'),
+    path('gerar-pdf/', views.gerar_pdf, name='gerar_pdf'),
+
+
 ]
-
-

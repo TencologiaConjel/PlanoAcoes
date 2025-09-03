@@ -1,12 +1,10 @@
-# views.py
 from __future__ import annotations
-
 import base64
 import logging
 import mimetypes
 import os
 from urllib.parse import urlencode
-
+from django.db.models import Count
 import boto3
 from django.conf import settings
 from django.contrib import messages
@@ -15,28 +13,25 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import Prefetch
-from django.http import HttpResponseForbidden, JsonResponse
+from django.utils.timezone import localdate
+from django.http import HttpResponseForbidden, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.urls import reverse 
-
+from django.template.loader import render_to_string
 from .forms import ContaForm
 from .models import Anexo, Base, Conta
+import re, html
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from django.contrib.staticfiles.storage import staticfiles_storage
 
 logger = logging.getLogger(__name__)
 
 def _clean_domain(d: str | None) -> str | None:
-    """
-    Sanitiza o host do CloudFront:
-    - remove caracteres invisíveis/BOM
-    - descarta espaços, '=' e aspas
-    - remove 'https?://'
-    - remove barras finais
-    """
     if not d:
         return None
     d = str(d)
-    d = d.replace("\u200b", "").replace("\ufeff", "")  # zero-width/BOM
+    d = d.replace("\u200b", "").replace("\ufeff", "")  
     d = d.strip(" \t\r\n'\"").lstrip("= ")
     d = d.replace("https://", "").replace("http://", "").strip("/")
     return d.split("/")[0] if d else None
@@ -65,7 +60,6 @@ except Exception:  # libs ausentes em dev/local
 from itertools import groupby
 
 def _group_by_month(qs):
-    """[{ 'label': '09/2025', 'contas': [Conta, ...] }, ...]"""
     itens = list(qs.order_by('-data', '-criado_em'))
     grupos = []
     for key, it in groupby(itens, key=lambda c: c.data.strftime('%Y-%m')):
@@ -85,7 +79,6 @@ def _s3_client():
 
 _CF_SIGNER = None
 def _get_cf_signer():
-    """Cria/retorna o signer do CloudFront se houver config válida."""
     global _CF_SIGNER
     if _CF_SIGNER is not None:
         return _CF_SIGNER
@@ -546,7 +539,218 @@ def base_context(request):
         context['base_atual'] = base_atual
 
         if base_atual and base_atual.logo:
-            context['logo_url'] = reverse('logo_base', args=[base_atual.id])  # <— namespace
+            context['logo_url'] = reverse('logo_base', args=[base_atual.id])  
         else:
             context['logo_url'] = static('img/logo-default.png')
     return context
+
+from django.shortcuts import render
+from django.http import HttpResponse
+from django.db.models import Q
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.units import inch
+from datetime import datetime
+from io import BytesIO
+from .models import Conta  # Substitua pelo nome do seu model
+
+
+def painel_transparencia(request):
+    """
+    View principal do painel de transparência com filtros
+    """
+    contas = Conta.objects.all().order_by('-data')
+    
+    # Aplicar filtros
+    mes = request.GET.get('mes')
+    ano = request.GET.get('ano')
+    data_inicio = request.GET.get('data_inicio')
+    data_fim = request.GET.get('data_fim')
+    
+    if mes:
+        contas = contas.filter(data__month=mes)
+    
+    if ano:
+        contas = contas.filter(data__year=ano)
+    
+    if data_inicio:
+        contas = contas.filter(data__gte=data_inicio)
+    
+    if data_fim:
+        contas = contas.filter(data__lte=data_fim)
+    
+    context = {
+        'contas': contas,
+    }
+    
+    return render(request, 'painel_transparencia.html', context)
+
+
+
+@login_required
+def gerar_pdf(request):
+    """
+    Gera PDF do Portal de Transparência com filtros por mês/ano ou intervalo de datas.
+    Colunas: Data | Título | Descrição
+    """
+    # Query base
+    contas = Conta.objects.all().order_by('-data')
+
+    # ---- Filtros ----
+    mes = request.GET.get('mes')           # "1".."12"
+    ano = request.GET.get('ano')           # "2025"
+    data_inicio = request.GET.get('data_inicio')  # "YYYY-MM-DD"
+    data_fim = request.GET.get('data_fim')        # "YYYY-MM-DD"
+
+    if ano and ano.isdigit():
+        contas = contas.filter(data__year=int(ano))
+    if mes and mes.isdigit():
+        contas = contas.filter(data__month=int(mes))
+
+    def _parse_ymd(s):
+        try:
+            return datetime.strptime(s, '%Y-%m-%d').date()
+        except Exception:
+            return None
+
+    di = _parse_ymd(data_inicio) if data_inicio else None
+    df = _parse_ymd(data_fim) if data_fim else None
+
+    if di:
+        contas = contas.filter(data__gte=di)
+    if df:
+        # inclui o dia final
+        contas = contas.filter(data__lte=df)
+
+    # ---- Montagem do PDF ----
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36
+    )
+
+    styles = getSampleStyleSheet()
+    # estilo de célula que quebra linha
+    cell_style = ParagraphStyle(
+        'cell',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=13,
+        spaceAfter=0
+    )
+
+    elements = []
+
+    # Título
+    elements.append(Paragraph("Relatório de Transparência", styles['Title']))
+    elements.append(Spacer(1, 10))
+
+    # Período mostrado
+    meses_pt = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+    periodo_texto = "Período: "
+
+    if di and df:
+        periodo_texto += f"{di.strftime('%d/%m/%Y')} a {df.strftime('%d/%m/%Y')}"
+    elif ano and mes and ano.isdigit() and mes.isdigit():
+        periodo_texto += f"{meses_pt[int(mes)]} de {ano}"
+    elif ano and ano.isdigit():
+        periodo_texto += f"Ano {ano}"
+    elif mes and mes.isdigit():
+        periodo_texto += f"Mês de {meses_pt[int(mes)]}"
+    else:
+        periodo_texto += "Todos os registros"
+
+    elements.append(Paragraph(periodo_texto, styles['Normal']))
+    elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
+    elements.append(Spacer(1, 16))
+
+    if contas.exists():
+        data_rows = [['Data', 'Título', 'Descrição']]
+
+        for conta in contas:
+            data_str = conta.data.strftime('%d/%m/%Y') if getattr(conta, 'data', None) else ''
+            titulo_par = Paragraph(conta.titulo or '', cell_style)
+            desc_html = _sanitize_for_reportlab(conta.descricao or '')
+            desc_par = Paragraph(desc_html, cell_style)
+
+            data_rows.append([data_str, titulo_par, desc_par])
+
+        col_widths = [80, 180, 263]
+
+        table = Table(data_rows, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#eeeeee')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),     
+            ('ALIGN', (1, 0), (2, -1), 'LEFT'),       
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.beige]),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ]))
+
+        elements.append(table)
+        elements.append(Spacer(1, 10))
+        elements.append(Paragraph(f"Total de registros: {contas.count()}", styles['Normal']))
+    else:
+        elements.append(Paragraph("Nenhum registro encontrado para o período selecionado.", styles['Normal']))
+
+    doc.build(elements)
+
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="relatorio_transparencia_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf"'
+    return response
+
+SPAN_OPEN_RE = re.compile(r'<span[^>]*>', flags=re.I)
+SPAN_CLOSE_RE = re.compile(r'</span\s*>', flags=re.I)
+
+TAG_RE = re.compile(r'</?([a-zA-Z0-9]+)(?:\s[^>]*)?>')
+
+def _sanitize_for_reportlab(raw: str) -> str:
+    if not raw:
+        return ""
+
+    txt = html.unescape(raw)
+
+    txt = txt.replace("\r\n", "\n").replace("\r", "\n")
+
+    txt = re.sub(r'</?p[^>]*>', '<br/>', txt, flags=re.I)
+
+    txt = re.sub(r'<strong[^>]*>', '<b>', txt, flags=re.I).replace('</strong>', '</b>')
+    txt = re.sub(r'<em[^>]*>', '<i>', txt, flags=re.I).replace('</em>', '</i>')
+
+    def _span_to_font(m):
+        tag = m.group(0)
+        size_m = re.search(r'font-size\s*:\s*(\d+)pt', tag, flags=re.I)
+        color_m = re.search(r'color\s*:\s*([#\w]+)', tag, flags=re.I)
+        face_m = re.search(r'font-family\s*:\s*([\'"]?)([^;"\']+)\1', tag, flags=re.I)
+
+        attrs = []
+        if size_m:
+            attrs.append(f'size="{size_m.group(1)}"')
+        if color_m:
+            attrs.append(f'color="{color_m.group(1)}"')
+        if face_m:
+            attrs.append(f'name="{face_m.group(2).strip()}"')
+
+        return f'<font{" " + " ".join(attrs) if attrs else ""}>'
+
+    txt = SPAN_OPEN_RE.sub(_span_to_font, txt)
+    txt = SPAN_CLOSE_RE.sub('</font>', txt)
+
+    txt = re.sub(r'<br\s*/?>', '<br/>', txt, flags=re.I)
+
+    ALLOWED = {'b','i','u','br','sup','sub','font','a'}
+    def _strip_unallowed(m):
+        tag = m.group(1).lower()
+        return m.group(0) if tag in ALLOWED else ''
+    txt = TAG_RE.sub(_strip_unallowed, txt)
+
+    return txt

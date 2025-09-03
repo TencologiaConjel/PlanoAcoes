@@ -7,20 +7,20 @@
   <i class="bi bi-clock-history me-2" aria-hidden="true"></i> Histórico de Ações
 </h2>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-  <a
-  class="nav-link btn-new-account"
-  href="{% url 'cadastrar_conta' %}"
->
-  <i class="bi bi-plus-circle me-2" aria-hidden="true"></i>
-  <span>Nova Conta</span>
-</a>
+<div class="d-flex justify-content-center align-items-center text-center">
+    <div class="justify-content-center align-items-center text-center">
+    <a class="nav-link btn-new-account" href="{% url 'cadastrar_conta' %}">         
+      <i class="bi bi-plus-circle me-2" aria-hidden="true"></i>         
+      <span>Nova Conta</span>       
+    </a>
+  </div>
 
-
-  <div class="small text-muted">
+  <div class="text-center">
     {% if request.current_base %}
-      <i class="bi bi-building me-1" aria-hidden="true"></i>
-      Base atual: <strong>{{ request.current_base.nome }}</strong>
+      <div class="small text-muted">
+        <i class="bi bi-building me-1" aria-hidden="true"></i>
+        Base atual: <strong>{{ request.current_base.nome }}</strong>
+      </div>
     {% endif %}
   </div>
 
@@ -43,7 +43,7 @@
 
 <style>
 
-  /* Botão "Nova Conta" — estilo pill com leve brilho */
+
 .btn-new-account{
   display:inline-flex;
   align-items:center;
@@ -54,18 +54,15 @@
   text-decoration:none!important;
   color:#fff!important;
 
-  /* gradiente e sombra */
   background: linear-gradient(135deg,#1e40af,#2563eb);
   box-shadow: 0 8px 20px rgba(37, 99, 235, .25);
 
-  /* animações */
   transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
   position:relative;
   overflow:hidden;
   border:0;
 }
 
-/* brilho suave ao passar o mouse */
 .btn-new-account::after{
   content:"";
   position:absolute;

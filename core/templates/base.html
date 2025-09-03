@@ -195,7 +195,7 @@
     </style>
 </head>
 <body>
-    <!-- Navbar corrigida no base.html -->
+   
 <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(135deg, #293A83 0%, #2F61AA 100%);">
   <div class="container">
     {% load static %}
@@ -245,6 +245,12 @@
           <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
             <i class="bi bi-clock-history me-1"></i>Histórico
           </a>
+        </li>
+        <li>
+            <a href="{% url 'painel_transparencia' %}" target="_blank" class="btn btn-primary">
+                <i class="bi bi-filetype-pdf me-2"></i> Relatorio
+            </a>
+
         </li>
         
         {% if request.user.is_superuser %}
