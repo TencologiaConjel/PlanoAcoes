@@ -19,6 +19,8 @@ urlpatterns = [
     path("dashboards/<slug:slug>/", views.powerbi_base, name="powerbi_base"),
     path('painel/', views.painel_transparencia, name='painel_transparencia'),
     path('gerar-pdf/', views.gerar_pdf, name='gerar_pdf'),
+     path( "conta/forcar-redefinicao/",views.force_password_change,name="force_password_change",
+    ),
 
 
 ]

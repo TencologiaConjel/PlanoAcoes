@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import UniqueConstraint
 from django.utils.text import slugify
 from django.utils import timezone
-from django.db.models.signals import post_delete, pre_save
+from django.db.models.signals import post_delete, pre_save, post_save
 from django.dispatch import receiver
 import os
 import mimetypes
@@ -80,6 +80,7 @@ class Membership(models.Model):
     def __str__(self):
         return f'{self.user} @ {self.base} ({self.role})'
 
+
 class ContaQuerySet(models.QuerySet):
     def for_user(self, user):
         if getattr(user, 'is_superuser', False):
@@ -109,6 +110,7 @@ class Conta(models.Model):
 
     def __str__(self):
         return self.titulo
+
 
 def anexo_upload_to(instance, filename: str):
     """
@@ -174,7 +176,6 @@ class Anexo(models.Model):
         if self.conta_id and not self.base_id:
             self.base = self.conta.base
         super().save(*args, **kwargs)
-
 
 
 @receiver(post_delete, sender=Anexo)
@@ -246,4 +247,23 @@ def _delete_old_logo_on_change(sender, instance: Base, **kwargs):
         except Exception:
             pass
 
-        
+class UserSecurity(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="security",
+    )
+    must_change_password = models.BooleanField(default=True, db_index=True)
+    password_changed_at = models.DateTimeField(null=True, blank=True)
+    last_reset_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Segurança do usuário"
+        verbose_name_plural = "Segurança dos usuários"
+
+    def __str__(self):
+        return f"Security<{self.user}>"
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def ensure_security_row(sender, instance, created, **kwargs):
+    UserSecurity.objects.get_or_create(user=instance)

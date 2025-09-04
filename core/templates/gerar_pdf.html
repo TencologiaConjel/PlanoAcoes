@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Transparência - Relatórios PDF</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .filter-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-left: 5px solid #667eea;
+        }
+
+        .filter-section h2 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 12px 15px;
+            border: 2px solid #e0e6ed;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(86, 171, 47, 0.3);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(245, 87, 108, 0.3);
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e6ed;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .info-box h3 {
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            color: #37474f;
+            margin-left: 20px;
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .filter-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                margin: 5px 0;
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        .quick-filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .quick-filter-btn {
+            padding: 8px 16px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+        }
+
+        .quick-filter-btn:hover {
+            background: #1976d2;
+            color: white;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Portal de Transparência</h1>
+            <p>Geração de Relatórios PDF com Filtros Personalizados</p>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <h3>ℹ️ Sobre os Relatórios</h3>
+                <ul>
+                    <li><strong>Relatório Geral:</strong> Lista todas as contas do período selecionado</li>
+                    <li><strong>Relatório por Base:</strong> Filtra apenas uma base específica</li>
+                    <li><strong>Relatório Consolidado:</strong> Permite selecionar contas específicas</li>
+                </ul>
+            </div>
+
+            <form id="filtroForm">
+                <div class="filter-section">
+                    <h2>🔍 Filtros de Período</h2>
+                    
+                    <div class="quick-filters">
+                        <button type="button" class="quick-filter-btn" onclick="setQuickFilter('mes_atual')">Mês Atual</button>
+                        <button type="button" class="quick-filter-btn" onclick="setQuickFilter('mes_anterior')">Mês Anterior</button>
+                        <button type="button" class="quick-filter-btn" onclick="setQuickFilter('ano_atual')">Ano Atual</button>
+                        <button type="button" class="quick-filter-btn" onclick="setQuickFilter('trimestre')">Último Trimestre</button>
+                        <button type="button" class="quick-filter-btn" onclick="setQuickFilter('limpar')">Limpar Filtros</button>
+                    </div>
+                    
+                    <div class="filter-row">
+                        <div class="form-group">
+                            <label for="ano">📅 Ano</label>
+                            <select id="ano" name="ano">
+                                <option value="">Todos os anos</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="mes">📆 Mês</label>
+                            <select id="mes" name="mes">
+                                <option value="">Todos os meses</option>
+                                <option value="1">Janeiro</option>
+                                <option value="2">Fevereiro</option>
+                                <option value="3">Março</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Maio</option>
+                                <option value="6">Junho</option>
+                                <option value="7">Julho</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Setembro</option>
+                                <option value="10">Outubro</option>
+                                <option value="11">Novembro</option>
+                                <option value="12">Dezembro</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="data_inicio">📅 Data Início</label>
+                            <input type="date" id="data_inicio" name="data_inicio">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="data_fim">📅 Data Fim</label>
+                            <input type="date" id="data_fim" name="data_fim">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filter-section">
+                    <h2>🏢 Filtros de Base e Conteúdo</h2>
+                    
+                    <div class="filter-row">
+                        <div class="form-group">
+                            <label for="base">🏢 Base/Empresa</label>
+                            <select id="base" name="base">
+                                <option value="">Todas as bases</option>
+                                <!-- Opções serão preenchidas dinamicamente -->
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="titulo_busca">🔍 Buscar no Título</label>
+                            <input type="text" id="titulo_busca" name="titulo_busca" placeholder="Digite parte do título...">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="valor_min">💰 Valor Mínimo</label>
+                            <input type="number" id="valor_min" name="valor_min" step="0.01" placeholder="0,00">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="valor_max">💰 Valor Máximo</label>
+                            <input type="number" id="valor_max" name="valor_max" step="0.01" placeholder="999999,99">
+                        </div>
+                    </div>
+                    
+                    <div class="filter-row">
+                        <div class="form-group">
+                            <label for="com_anexos">📎 Anexos</label>
+                            <select id="com_anexos" name="com_anexos">
+                                <option value="">Todas as contas</option>
+                                <option value="sim">Apenas com anexos</option>
+                                <option value="nao">Apenas sem anexos</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="ordenacao">📋 Ordenação</label>
+                            <select id="ordenacao" name="ordenacao">
+                                <option value="data_desc">Data (Mais recente)</option>
+                                <option value="data_asc">Data (Mais antiga)</option>
+                                <option value="titulo_asc">Título (A-Z)</option>
+                                <option value="titulo_desc">Título (Z-A)</option>
+                                <option value="valor_desc">Valor (Maior)</option>
+                                <option value="valor_asc">Valor (Menor)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" onclick="gerarPDF('geral')">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/>
+                    </svg>
+                    Relatório Geral PDF
+                </button>
+                
+                <button type="button" class="btn btn-success" onclick="visualizarContas()">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Visualizar Contas
+                </button>
+                
+                <button type="button" class="btn btn-warning" onclick="gerarPDF('consolidado')" style="display:none;" id="btnConsolidado">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Gerar PDF Selecionadas
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <p>⏳ Gerando relatório PDF... Aguarde alguns instantes.</p>
+            </div>
+
+            <div id="contasLista" style="display:none; margin-top: 30px;">
+                <div class="filter-section">
+                    <h2>📋 Contas Encontradas</h2>
+                    <div style="margin-bottom: 15px;">
+                        <label>
+                            <input type="checkbox" id="selecionarTodas"> 
+                            <strong>Selecionar/Desmarcar Todas</strong>
+                        </label>
+                    </div>
+                    <div id="listaContas" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function preencherAnos() {
+            const anoSelect = document.getElementById('ano');
+            const anoAtual = new Date().getFullYear();
+            
+            for (let ano = anoAtual; ano >= anoAtual - 10; ano--) {
+                const option = document.createElement('option');
+                option.value = ano;
+                option.textContent = ano;
+                anoSelect.appendChild(option);
+            }
+        }
+
+        // Filtros rápidos
+        function setQuickFilter(tipo) {
+            const hoje = new Date();
+            const ano = hoje.getFullYear();
+            const mes = hoje.getMonth() + 1;
+
+            switch (tipo) {
+                case 'mes_atual':
+                    document.getElementById('ano').value = ano;
+                    document.getElementById('mes').value = mes;
+                    document.getElementById('data_inicio').value = '';
+                    document.getElementById('data_fim').value = '';
+                    break;
+                    
+                case 'mes_anterior':
+                    const mesAnterior = mes === 1 ? 12 : mes - 1;
+                    const anoMesAnterior = mes === 1 ? ano - 1 : ano;
+                    document.getElementById('ano').value = anoMesAnterior;
+                    document.getElementById('mes').value = mesAnterior;
+                    document.getElementById('data_inicio').value = '';
+                    document.getElementById('data_fim').value = '';
+                    break;
+                    
+                case 'ano_atual':
+                    document.getElementById('ano').value = ano;
+                    document.getElementById('mes').value = '';
+                    document.getElementById('data_inicio').value = '';
+                    document.getElementById('data_fim').value = '';
+                    break;
+                    
+                case 'trimestre':
+                    const inicioTrimestre = new Date(ano, mes - 4, 1);
+                    document.getElementById('data_inicio').value = inicioTrimestre.toISOString().split('T')[0];
+                    document.getElementById('data_fim').value = hoje.toISOString().split('T')[0];
+                    document.getElementById('ano').value = '';
+                    document.getElementById('mes').value = '';
+                    break;
+                    
+                case 'limpar':
+                    document.getElementById('filtroForm').reset();
+                    break;
+            }
+        }
+
+        // Gerar PDF
+        function gerarPDF(tipo) {
+            const formData = new FormData(document.getElementById('filtroForm'));
+            let url = '';
+            
+            if (tipo === 'geral') {
+                url = '/portal-transparencia-pdf/?' + new URLSearchParams(formData).toString();
+            } else if (tipo === 'consolidado') {
+                const contasSelecionadas = Array.from(document.querySelectorAll('input[name="conta_selecionada"]:checked'))
+                    .map(cb => cb.value);
+                
+                if (contasSelecionadas.length === 0) {
+                    alert('Selecione pelo menos uma conta para gerar o relatório consolidado.');
+                    return;
+                }
+                
+                // Usar POST para o relatório consolidado
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/portal-transparencia-lote-pdf/';
+                
+                contasSelecionadas.forEach(id => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'ids[]';
+                    input.value = id;
+                    form.appendChild(input);
+                });
+                
+                // Adicionar CSRF token se necessário
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+                if (csrfToken) {
+                    const csrf = document.createElement('input');
+                    csrf.type = 'hidden';
+                    csrf.name = 'csrfmiddlewaretoken';
+                    csrf.value = csrfToken.value;
+                    form.appendChild(csrf);
+                }
+                
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            
+            window.open(url, '_blank');
+            
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+            }, 2000);
+        }
+
+        async function visualizarContas() {
+            const formData = new FormData(document.getElementById('filtroForm'));
+            
+            try {
+                const response = await fetch('/api/contas-filtradas/?' + new URLSearchParams(formData).toString());
+                const data = await response.json();
+                
+                const contasDiv = document.getElementById('contasLista');
+                const listaDiv = document.getElementById('listaContas');
+                
+                if (data.contas && data.contas.length > 0) {
+                    let html = '';
+                    data.contas.forEach(conta => {
+                        html += `
+                            <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" name="conta_selecionada" value="${conta.id}">
+                                <div>
+                                    <strong>${conta.titulo}</strong><br>
+                                    <small style="color: #666;">
+                                        📅 ${conta.data} | 
+                                        🏢 ${conta.base_nome || 'N/A'} |
+                                        ${conta.valor ? `💰 R$ ${conta.valor}` : ''}
+                                        ${conta.anexos_count > 0 ? `📎 ${conta.anexos_count} anexo(s)` : ''}
+                                    </small>
+                                    ${conta.descricao ? `<br><small>${conta.descricao}</small>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    listaDiv.innerHTML = html;
+                    contasDiv.style.display = 'block';
+                    document.getElementById('btnConsolidado').style.display = 'inline-flex';
+                } else {
+                    listaDiv.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Nenhuma conta encontrada com os filtros selecionados.</p>';
+                    contasDiv.style.display = 'block';
+                    document.getElementById('btnConsolidado').style.display = 'none';
+                }
+                
+            } catch (error) {
+                alert('Erro ao buscar contas: ' + error.message);
+            }
+        }
+
+        document.getElementById('selecionarTodas').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('input[name="conta_selecionada"]');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            preencherAnos();
+            
+            const hoje = new Date();
+            document.getElementById('ano').value = hoje.getFullYear();
+            document.getElementById('mes').value = hoje.getMonth() + 1;
+        });
+
+        async function carregarBases() {
+            try {
+               
+                const response = await fetch('/api/bases/');
+                const data = await response.json();
+                
+                const baseSelect = document.getElementById('base');
+                data.bases.forEach(base => {
+                    const option = document.createElement('option');
+                    option.value = base.id;
+                    option.textContent = base.nome;
+                    baseSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.log('Erro ao carregar bases:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            carregarBases();
+        });
+    </script>
+</body>
+</html>

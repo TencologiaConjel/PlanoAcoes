@@ -4,11 +4,10 @@ import logging
 import mimetypes
 import os
 from urllib.parse import urlencode
-from django.db.models import Count
 import boto3
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, get_user_model, login
+from django.contrib.auth import authenticate, get_user_model, login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -24,6 +23,7 @@ from .models import Anexo, Base, Conta
 import re, html
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from django.contrib.staticfiles.storage import staticfiles_storage
+from django.contrib.auth.forms import SetPasswordForm
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +141,6 @@ def cloudfront_signed_url_with_inline(
     filename: str | None = None,
     content_type: str | None = None,
 ) -> str | None:
-    """
-    Gera URL do CloudFront (assinada se chave configurada).
-    Se a distribuição encaminha as query params ao S3, inclui response-content-*.
-    """
     if not CF_DOMAIN:
         return None
 
@@ -152,7 +148,6 @@ def cloudfront_signed_url_with_inline(
     signer = _get_cf_signer()
 
     if not signer:
-        # Distribuição pública (sem assinatura)
         q = {}
         if content_type:
             q["response-content-type"] = content_type
@@ -375,7 +370,6 @@ def excluir_conta(request, pk):
 
 @login_required
 def baixar_anexo(request, pk):
-    """Redireciona para URL (CF ou S3) com Content-Disposition=inline, após validar a base."""
     anexo = get_object_or_404(Anexo.objects.select_related('base', 'conta'), pk=pk)
     if not (request.user.is_superuser or request.user.bases.filter(pk=anexo.base_id).exists()):
         return HttpResponseForbidden('Sem permissão para este anexo.')
@@ -401,7 +395,6 @@ def baixar_anexo(request, pk):
 
 @login_required
 def excluir_anexo(request, pk):
-    """Exclui o anexo (arquivo + registro), se o usuário tiver acesso à base."""
     anexo = get_object_or_404(Anexo.objects.select_related('base', 'conta'), pk=pk)
     if not (request.user.is_superuser or request.user.bases.filter(pk=anexo.base_id).exists()):
         return HttpResponseForbidden('Sem permissão para este anexo.')
@@ -419,7 +412,6 @@ def excluir_anexo(request, pk):
 
 @login_required
 def api_contas_json(request):
-    """API JSON escopada por base do usuário."""
     base_atual = _resolver_base_para_request(request)
 
     if request.user.is_superuser:
@@ -439,18 +431,13 @@ def api_contas_json(request):
     return JsonResponse({'contas': contas_list})
 
 
-# --- helpers de permissão -----------------------------------------------------
 def _user_can_access_base(user, base: Base) -> bool:
     if not base:
         return False
     return bool(user.is_superuser or user.bases.filter(pk=base.pk).exists())
 
-# --- Power BI: lista e detalhe por base --------------------------------------
 @login_required
 def powerbi_index(request):
-    """
-    Lista as bases acessíveis ao usuário. Se houver apenas 1, redireciona direto.
-    """
     if request.user.is_superuser:
         bases = Base.objects.filter(ativo=True).order_by("nome")
     else:
@@ -458,7 +445,7 @@ def powerbi_index(request):
 
     if bases.count() == 1:
         base = bases.first()
-        return redirect("powerbi_base", slug=base.slug)  # <— namespace
+        return redirect("powerbi_base", slug=base.slug) 
 
     return render(request, "powerbi_index.html", {
         "bases": bases,
@@ -554,16 +541,12 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.units import inch
 from datetime import datetime
 from io import BytesIO
-from .models import Conta  # Substitua pelo nome do seu model
+from .models import Conta 
 
 
 def painel_transparencia(request):
-    """
-    View principal do painel de transparência com filtros
-    """
     contas = Conta.objects.all().order_by('-data')
     
-    # Aplicar filtros
     mes = request.GET.get('mes')
     ano = request.GET.get('ano')
     data_inicio = request.GET.get('data_inicio')
@@ -583,6 +566,7 @@ def painel_transparencia(request):
     
     context = {
         'contas': contas,
+        'base_atual': None,  
     }
     
     return render(request, 'painel_transparencia.html', context)
@@ -591,18 +575,12 @@ def painel_transparencia(request):
 
 @login_required
 def gerar_pdf(request):
-    """
-    Gera PDF do Portal de Transparência com filtros por mês/ano ou intervalo de datas.
-    Colunas: Data | Título | Descrição
-    """
-    # Query base
     contas = Conta.objects.all().order_by('-data')
 
-    # ---- Filtros ----
-    mes = request.GET.get('mes')           # "1".."12"
-    ano = request.GET.get('ano')           # "2025"
-    data_inicio = request.GET.get('data_inicio')  # "YYYY-MM-DD"
-    data_fim = request.GET.get('data_fim')        # "YYYY-MM-DD"
+    mes = request.GET.get('mes')           
+    ano = request.GET.get('ano')           
+    data_inicio = request.GET.get('data_inicio')  
+    data_fim = request.GET.get('data_fim')       
 
     if ano and ano.isdigit():
         contas = contas.filter(data__year=int(ano))
@@ -621,10 +599,8 @@ def gerar_pdf(request):
     if di:
         contas = contas.filter(data__gte=di)
     if df:
-        # inclui o dia final
         contas = contas.filter(data__lte=df)
 
-    # ---- Montagem do PDF ----
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -633,7 +609,6 @@ def gerar_pdf(request):
     )
 
     styles = getSampleStyleSheet()
-    # estilo de célula que quebra linha
     cell_style = ParagraphStyle(
         'cell',
         parent=styles['Normal'],
@@ -644,11 +619,9 @@ def gerar_pdf(request):
 
     elements = []
 
-    # Título
     elements.append(Paragraph("Relatório de Transparência", styles['Title']))
     elements.append(Spacer(1, 10))
 
-    # Período mostrado
     meses_pt = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
     periodo_texto = "Período: "
@@ -754,3 +727,29 @@ def _sanitize_for_reportlab(raw: str) -> str:
     txt = TAG_RE.sub(_strip_unallowed, txt)
 
     return txt
+
+from django.utils import timezone
+from .models import UserSecurity
+
+@login_required
+def force_password_change(request):
+    sec, _ = UserSecurity.objects.get_or_create(user=request.user)
+    if not sec.must_change_password:
+        return redirect("dashboard")
+
+    form = SetPasswordForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        update_session_auth_hash(request, user)
+        sec.must_change_password = False
+        sec.last_reset_at = timezone.now()
+        sec.save(update_fields=["must_change_password", "last_reset_at"])
+        messages.success(request, "Senha atualizada com sucesso.")
+        return redirect("dashboard")
+
+    ctx = {
+        "form": form,
+        "base_atual": _resolver_base_para_request(request),  
+        "bases": Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user),
+    }
+    return render(request, "force_password_change.html", ctx)

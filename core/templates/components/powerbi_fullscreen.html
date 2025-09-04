@@ -36,7 +36,6 @@
 </div>
 
 <style>
-/* ======== pbiX (namespaced) — não vaza pro base ======== */
 .pbiX-root{--pbiX-max:1280px; --pbiX-gap:12px; --pbiX-radius:12px; --pbiX-shadow:0 6px 20px rgba(0,0,0,.08)}
 .pbiX-head{display:flex;align-items:center;gap:12px;justify-content:space-between;max-width:var(--pbiX-max);margin:8px auto 10px;padding:0 8px}
 .pbiX-title{margin:0;font-weight:700;font-size:clamp(1.15rem,2.2vw,1.6rem);color:#223}
@@ -52,7 +51,6 @@
 .pbiX-muted{color:#6b7280;font-size:.95rem}
 .pbiX-empty{display:grid;place-items:center;min-height:360px;color:#6b7280;padding:24px;text-align:center}
 @keyframes pbiX-spin{to{transform:rotate(360deg)}}
-/* fullscreen nativo: só cresce a área, não mexe no base */
 :fullscreen .pbiX-area{height:100vh}
 @media (max-width:768px){
   .pbiX-head{padding:0 6px}
@@ -71,7 +69,6 @@
 
   if(frame){
     frame.addEventListener('load', ()=>{ wait && (wait.style.display='none') })
-    // segurança: se o onload não disparar, some com o loader
     setTimeout(()=>{ wait && (wait.style.display='none') }, 6000)
   }
 
@@ -85,7 +82,6 @@
         btnFS.textContent = '⛶ Tela cheia'
       }
     }catch(e){
-      // fallback: se o navegador bloquear, apenas alterna altura ocupando viewport
       area.style.height = area.style.height.includes('100vh') ? '78vh' : '100vh'
     }
   }
