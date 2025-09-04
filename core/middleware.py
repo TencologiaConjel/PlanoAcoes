@@ -33,3 +33,16 @@ class ForcePasswordChangeMiddleware:
             if sec.must_change_password:
                 return redirect("force_password_change")
         return self.get_response(request)
+
+class CurrentBaseMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+    def __call__(self, request):
+        request.current_base = None
+        base_id = request.session.get('current_base_id')
+        if base_id:
+            try:
+                request.current_base = Base.objects.get(pk=base_id, ativo=True)
+            except Base.DoesNotExist:
+                pass
+        return self.get_response(request)

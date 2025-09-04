@@ -216,9 +216,6 @@ def _delete_old_file_on_change(sender, instance: Anexo, **kwargs):
 
 @receiver(post_delete, sender=Base)
 def _delete_logo_on_base_delete(sender, instance: Base, **kwargs):
-    """
-    Remove a logo do storage quando a Base é deletada.
-    """
     try:
         logo = getattr(instance, "logo", None)
         if logo and logo.name:

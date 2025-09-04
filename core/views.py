@@ -543,10 +543,28 @@ from datetime import datetime
 from io import BytesIO
 from .models import Conta 
 
-
 def painel_transparencia(request):
-    contas = Conta.objects.all().order_by('-data')
+    """
+    View principal do painel de transparência com filtros
+    """
+    # Aplicar filtro de base conforme permissões do usuário
+    base_atual = _resolver_base_para_request(request)
     
+    if request.user.is_superuser:
+        if base_atual:
+            contas = Conta.objects.filter(base=base_atual)
+        else:
+            contas = Conta.objects.all()
+    else:
+        bases_user = _bases_do_usuario(request.user)
+        if base_atual and base_atual in bases_user:
+            contas = Conta.objects.filter(base=base_atual)
+        else:
+            contas = Conta.objects.filter(base__in=bases_user)
+    
+    contas = contas.order_by('-data')
+    
+    # Aplicar filtros de data
     mes = request.GET.get('mes')
     ano = request.GET.get('ano')
     data_inicio = request.GET.get('data_inicio')
@@ -564,121 +582,158 @@ def painel_transparencia(request):
     if data_fim:
         contas = contas.filter(data__lte=data_fim)
     
+    # Obter bases para o contexto (para o seletor de base se for superuser)
+    bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
+    
     context = {
         'contas': contas,
-        'base_atual': None,  
+        'base_atual': base_atual,
+        'bases': bases,
     }
     
     return render(request, 'painel_transparencia.html', context)
 
 
-
-@login_required
 def gerar_pdf(request):
-    contas = Conta.objects.all().order_by('-data')
-
-    mes = request.GET.get('mes')           
-    ano = request.GET.get('ano')           
-    data_inicio = request.GET.get('data_inicio')  
-    data_fim = request.GET.get('data_fim')       
-
-    if ano and ano.isdigit():
-        contas = contas.filter(data__year=int(ano))
-    if mes and mes.isdigit():
-        contas = contas.filter(data__month=int(mes))
-
-    def _parse_ymd(s):
-        try:
-            return datetime.strptime(s, '%Y-%m-%d').date()
-        except Exception:
-            return None
-
-    di = _parse_ymd(data_inicio) if data_inicio else None
-    df = _parse_ymd(data_fim) if data_fim else None
-
-    if di:
-        contas = contas.filter(data__gte=di)
-    if df:
-        contas = contas.filter(data__lte=df)
-
+    """
+    View para gerar PDF com os dados filtrados
+    """
+    # Aplicar filtro de base conforme permissões do usuário
+    base_atual = _resolver_base_para_request(request)
+    
+    if request.user.is_superuser:
+        if base_atual:
+            contas = Conta.objects.filter(base=base_atual)
+        else:
+            contas = Conta.objects.all()
+    else:
+        bases_user = _bases_do_usuario(request.user)
+        if base_atual and base_atual in bases_user:
+            contas = Conta.objects.filter(base=base_atual)
+        else:
+            contas = Conta.objects.filter(base__in=bases_user)
+    
+    contas = contas.order_by('-data')
+    
+    # Aplicar os mesmos filtros de data da view principal
+    mes = request.GET.get('mes')
+    ano = request.GET.get('ano')
+    data_inicio = request.GET.get('data_inicio')
+    data_fim = request.GET.get('data_fim')
+    
+    if mes:
+        contas = contas.filter(data__month=mes)
+    
+    if ano:
+        contas = contas.filter(data__year=ano)
+    
+    if data_inicio:
+        contas = contas.filter(data__gte=data_inicio)
+    
+    if data_fim:
+        contas = contas.filter(data__lte=data_fim)
+    
+    # Criar o PDF
     buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36
-    )
-
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    
+    # Estilos
     styles = getSampleStyleSheet()
-    cell_style = ParagraphStyle(
-        'cell',
-        parent=styles['Normal'],
-        fontSize=10,
-        leading=13,
-        spaceAfter=0
-    )
-
+    
+    # Elementos do PDF
     elements = []
-
-    elements.append(Paragraph("Relatório de Transparência", styles['Title']))
-    elements.append(Spacer(1, 10))
-
-    meses_pt = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+    
+    # Título
+    title_text = "Relatório de Transparência"
+    if base_atual:
+        title_text += f" - {base_atual.nome}"
+    
+    title = Paragraph(title_text, styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 12))
+    
+    # Período
     periodo_texto = "Período: "
-
-    if di and df:
-        periodo_texto += f"{di.strftime('%d/%m/%Y')} a {df.strftime('%d/%m/%Y')}"
-    elif ano and mes and ano.isdigit() and mes.isdigit():
-        periodo_texto += f"{meses_pt[int(mes)]} de {ano}"
-    elif ano and ano.isdigit():
+    if data_inicio and data_fim:
+        periodo_texto += f"{data_inicio} a {data_fim}"
+    elif mes and ano:
+        meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+        periodo_texto += f"{meses[int(mes)]} de {ano}"
+    elif ano:
         periodo_texto += f"Ano {ano}"
-    elif mes and mes.isdigit():
-        periodo_texto += f"Mês de {meses_pt[int(mes)]}"
+    elif mes:
+        meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+        periodo_texto += f"Mês de {meses[int(mes)]}"
     else:
         periodo_texto += "Todos os registros"
-
-    elements.append(Paragraph(periodo_texto, styles['Normal']))
-    elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles['Normal']))
-    elements.append(Spacer(1, 16))
-
+    
+    periodo = Paragraph(periodo_texto, styles['Normal'])
+    elements.append(periodo)
+    elements.append(Spacer(1, 12))
+    
+    # Data de geração
+    data_geracao = Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", styles['Normal'])
+    elements.append(data_geracao)
+    elements.append(Spacer(1, 20))
+    
+    # Tabela
     if contas.exists():
-        data_rows = [['Data', 'Título', 'Descrição']]
-
+        # Dados da tabela (ajustar conforme os campos do seu modelo Conta)
+        data = [['Título', 'Descrição', 'Data', 'Valor']]
+        
+        total = 0
         for conta in contas:
-            data_str = conta.data.strftime('%d/%m/%Y') if getattr(conta, 'data', None) else ''
-            titulo_par = Paragraph(conta.titulo or '', cell_style)
-            desc_html = _sanitize_for_reportlab(conta.descricao or '')
-            desc_par = Paragraph(desc_html, cell_style)
-
-            data_rows.append([data_str, titulo_par, desc_par])
-
-        col_widths = [80, 180, 263]
-
-        table = Table(data_rows, colWidths=col_widths, repeatRows=1)
+            # Verificar se o modelo tem campo 'valor' - ajustar conforme necessário
+            valor = getattr(conta, 'valor', 0) or 0
+            data.append([
+                conta.titulo,
+                conta.descricao or '',
+                conta.data.strftime('%d/%m/%Y') if conta.data else '',
+                f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            ])
+            total += valor
+        
+        # Adicionar linha de total
+        data.append(['', '', 'TOTAL:', f"R$ {total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')])
+        
+        # Criar tabela
+        table = Table(data)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#eeeeee')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),     
-            ('ALIGN', (1, 0), (2, -1), 'LEFT'),       
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.beige]),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
-
+        
         elements.append(table)
-        elements.append(Spacer(1, 10))
-        elements.append(Paragraph(f"Total de registros: {contas.count()}", styles['Normal']))
+        
+        elements.append(Spacer(1, 12))
+        total_registros = Paragraph(f"Total de registros: {contas.count()}", styles['Normal'])
+        elements.append(total_registros)
     else:
-        elements.append(Paragraph("Nenhum registro encontrado para o período selecionado.", styles['Normal']))
-
+        no_data = Paragraph("Nenhum registro encontrado para o período selecionado.", styles['Normal'])
+        elements.append(no_data)
+    
     doc.build(elements)
-
+    
     buffer.seek(0)
+    
+    filename = f"relatorio_transparencia"
+    if base_atual:
+        filename += f"_{base_atual.slug}"
+    filename += f"_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="relatorio_transparencia_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf"'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
     return response
 
 SPAN_OPEN_RE = re.compile(r'<span[^>]*>', flags=re.I)
@@ -749,7 +804,7 @@ def force_password_change(request):
 
     ctx = {
         "form": form,
-        "base_atual": _resolver_base_para_request(request),  
+        "base_atual": _resolver_base_para_request(request),
         "bases": Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user),
     }
     return render(request, "force_password_change.html", ctx)
