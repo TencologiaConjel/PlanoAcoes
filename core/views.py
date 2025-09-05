@@ -593,195 +593,249 @@ def painel_transparencia(request):
     
     return render(request, 'painel_transparencia.html', context)
 
+# --- helpers para o PDF (deixe acima da view) --------------------------------
+import re, html
+from reportlab.platypus import Paragraph
 
-def gerar_pdf(request):
+_TAG_RE = re.compile(r'</?([a-zA-Z0-9]+)(?:\s[^>]*)?>')
+
+def _plain_text(s: str | None) -> str:
+    """Remove HTML e normaliza espaços/linhas para uso em Título."""
+    if not s:
+        return ""
+    txt = html.unescape(s)
+    txt = re.sub(r'<[^>]+>', '', txt)                     # remove qualquer tag
+    txt = txt.replace('\r\n', '\n').replace('\r', '\n')   # normaliza quebras
+    txt = re.sub(r'[ \t]+', ' ', txt)                     # colapsa espaços
+    return txt.strip()
+
+def _sanitize_for_reportlab(raw: str | None) -> str:
     """
-    View para gerar PDF com os dados filtrados
+    Converte/limpa HTML para algo que o ReportLab entende nas células de Descrição.
+    Mantém apenas <b>, <i>, <u>, <br/>, <sup>, <sub>. Remove <table> etc.
     """
-    # Aplicar filtro de base conforme permissões do usuário
-    base_atual = _resolver_base_para_request(request)
-    
-    if request.user.is_superuser:
-        if base_atual:
-            contas = Conta.objects.filter(base=base_atual)
-        else:
-            contas = Conta.objects.all()
-    else:
-        bases_user = _bases_do_usuario(request.user)
-        if base_atual and base_atual in bases_user:
-            contas = Conta.objects.filter(base=base_atual)
-        else:
-            contas = Conta.objects.filter(base__in=bases_user)
-    
-    contas = contas.order_by('-data')
-    
-    # Aplicar os mesmos filtros de data da view principal
-    mes = request.GET.get('mes')
-    ano = request.GET.get('ano')
-    data_inicio = request.GET.get('data_inicio')
-    data_fim = request.GET.get('data_fim')
-    
-    if mes:
-        contas = contas.filter(data__month=mes)
-    
-    if ano:
-        contas = contas.filter(data__year=ano)
-    
-    if data_inicio:
-        contas = contas.filter(data__gte=data_inicio)
-    
-    if data_fim:
-        contas = contas.filter(data__lte=data_fim)
-    
-    # Criar o PDF
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    
-    # Estilos
-    styles = getSampleStyleSheet()
-    
-    # Elementos do PDF
-    elements = []
-    
-    # Título
-    title_text = "Relatório de Transparência"
-    if base_atual:
-        title_text += f" - {base_atual.nome}"
-    
-    title = Paragraph(title_text, styles['Title'])
-    elements.append(title)
-    elements.append(Spacer(1, 12))
-    
-    # Período
-    periodo_texto = "Período: "
-    if data_inicio and data_fim:
-        periodo_texto += f"{data_inicio} a {data_fim}"
-    elif mes and ano:
-        meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-        periodo_texto += f"{meses[int(mes)]} de {ano}"
-    elif ano:
-        periodo_texto += f"Ano {ano}"
-    elif mes:
-        meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-        periodo_texto += f"Mês de {meses[int(mes)]}"
-    else:
-        periodo_texto += "Todos os registros"
-    
-    periodo = Paragraph(periodo_texto, styles['Normal'])
-    elements.append(periodo)
-    elements.append(Spacer(1, 12))
-    
-    # Data de geração
-    data_geracao = Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}", styles['Normal'])
-    elements.append(data_geracao)
-    elements.append(Spacer(1, 20))
-    
-    # Tabela
-    if contas.exists():
-        # Dados da tabela (ajustar conforme os campos do seu modelo Conta)
-        data = [['Título', 'Descrição', 'Data', 'Valor']]
-        
-        total = 0
-        for conta in contas:
-            # Verificar se o modelo tem campo 'valor' - ajustar conforme necessário
-            valor = getattr(conta, 'valor', 0) or 0
-            data.append([
-                conta.titulo,
-                conta.descricao or '',
-                conta.data.strftime('%d/%m/%Y') if conta.data else '',
-                f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-            ])
-            total += valor
-        
-        # Adicionar linha de total
-        data.append(['', '', 'TOTAL:', f"R$ {total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')])
-        
-        # Criar tabela
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        elements.append(table)
-        
-        elements.append(Spacer(1, 12))
-        total_registros = Paragraph(f"Total de registros: {contas.count()}", styles['Normal'])
-        elements.append(total_registros)
-    else:
-        no_data = Paragraph("Nenhum registro encontrado para o período selecionado.", styles['Normal'])
-        elements.append(no_data)
-    
-    doc.build(elements)
-    
-    buffer.seek(0)
-    
-    filename = f"relatorio_transparencia"
-    if base_atual:
-        filename += f"_{base_atual.slug}"
-    filename += f"_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-    
-    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
-    return response
-
-SPAN_OPEN_RE = re.compile(r'<span[^>]*>', flags=re.I)
-SPAN_CLOSE_RE = re.compile(r'</span\s*>', flags=re.I)
-
-TAG_RE = re.compile(r'</?([a-zA-Z0-9]+)(?:\s[^>]*)?>')
-
-def _sanitize_for_reportlab(raw: str) -> str:
     if not raw:
         return ""
 
     txt = html.unescape(raw)
 
-    txt = txt.replace("\r\n", "\n").replace("\r", "\n")
+    # remove tabelas/blocos complexos
+    txt = re.sub(r'<table\b.*?>.*?</table\s*>', '', txt, flags=re.I | re.S)
 
+    # normaliza quebras
+    txt = txt.replace('\r\n', '\n').replace('\r', '\n')
+
+    # <p> -> <br/>
     txt = re.sub(r'</?p[^>]*>', '<br/>', txt, flags=re.I)
 
+    # strong/em -> b/i
     txt = re.sub(r'<strong[^>]*>', '<b>', txt, flags=re.I).replace('</strong>', '</b>')
     txt = re.sub(r'<em[^>]*>', '<i>', txt, flags=re.I).replace('</em>', '</i>')
 
-    def _span_to_font(m):
-        tag = m.group(0)
-        size_m = re.search(r'font-size\s*:\s*(\d+)pt', tag, flags=re.I)
-        color_m = re.search(r'color\s*:\s*([#\w]+)', tag, flags=re.I)
-        face_m = re.search(r'font-family\s*:\s*([\'"]?)([^;"\']+)\1', tag, flags=re.I)
+    # bullets/travessões que a Helvetica não tem
+    txt = re.sub(r'[\u2022\u25AA\u25E6\u25CF\u25A0\u25A1]', '- ', txt)  # • ▪ ◦ ● ■ □
+    txt = re.sub(r'[\u2013\u2014]', '-', txt)                            # – —
 
-        attrs = []
-        if size_m:
-            attrs.append(f'size="{size_m.group(1)}"')
-        if color_m:
-            attrs.append(f'color="{color_m.group(1)}"')
-        if face_m:
-            attrs.append(f'name="{face_m.group(2).strip()}"')
+    # fecha <br> "solto"
+    txt = re.sub(r'<br\s*>', '<br/>', txt, flags=re.I)
 
-        return f'<font{" " + " ".join(attrs) if attrs else ""}>'
+    # mantém somente um conjunto mínimo de tags
+    ALLOWED = {'b', 'i', 'u', 'br', 'sup', 'sub'}
+    def _keep(m):
+        return m.group(0) if m.group(1).lower() in ALLOWED else ''
+    txt = _TAG_RE.sub(_keep, txt)
 
-    txt = SPAN_OPEN_RE.sub(_span_to_font, txt)
-    txt = SPAN_CLOSE_RE.sub('</font>', txt)
+    # colapsa brs seguidos
+    txt = re.sub(r'(?:<br/>\s*){3,}', '<br/><br/>', txt)
 
-    txt = re.sub(r'<br\s*/?>', '<br/>', txt, flags=re.I)
+    return txt.strip()
 
-    ALLOWED = {'b','i','u','br','sup','sub','font','a'}
-    def _strip_unallowed(m):
-        tag = m.group(1).lower()
-        return m.group(0) if tag in ALLOWED else ''
-    txt = TAG_RE.sub(_strip_unallowed, txt)
+def _safe_paragraph(text: str | None, style) -> Paragraph:
+    """Garante Paragraph sempre com string (nunca None) e com fallback seguro."""
+    s = text if isinstance(text, str) else ("" if text is None else str(text))
+    if not s:
+        s = ""
+    try:
+        return Paragraph(s, style)
+    except Exception:
+        # se algo escapar, escapa HTML e tenta de novo
+        from html import escape
+        return Paragraph(escape(s), style)
 
-    return txt
+# -----------------------------------------------------------------------------
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
+from reportlab.lib.units import inch
+from io import BytesIO
+from datetime import datetime
+
+@login_required
+def gerar_pdf(request):
+    """
+    Relatório de Transparência (Data | Título | Descrição)
+    - Respeita a base do usuário
+    - Filtros: mes, ano, data_inicio, data_fim
+    - Conteúdo sanitizado para o ReportLab
+    """
+    # ---- Filtro de base por permissão ----
+    base_atual = _resolver_base_para_request(request)
+
+    if request.user.is_superuser:
+        contas = Conta.objects.all()
+        if base_atual:
+            contas = contas.filter(base=base_atual)
+    else:
+        bases_user = _bases_do_usuario(request.user)
+        if base_atual and bases_user.filter(pk=base_atual.pk).exists():
+            contas = Conta.objects.filter(base=base_atual)
+        else:
+            contas = Conta.objects.filter(base__in=bases_user)
+
+    contas = contas.order_by('-data')
+
+    # ---- Filtros de período ----
+    mes = request.GET.get('mes')
+    ano = request.GET.get('ano')
+    data_inicio = request.GET.get('data_inicio')
+    data_fim = request.GET.get('data_fim')
+
+    if mes and mes.isdigit():
+        contas = contas.filter(data__month=int(mes))
+    if ano and ano.isdigit():
+        contas = contas.filter(data__year=int(ano))
+    if data_inicio:
+        contas = contas.filter(data__gte=data_inicio)
+    if data_fim:
+        contas = contas.filter(data__lte=data_fim)
+
+    # ---- Montagem do PDF ----
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=36, rightMargin=36, topMargin=48, bottomMargin=36
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=18,
+        alignment=1,
+        textColor=colors.HexColor('#1f4aa8'),
+    )
+    meta_style = ParagraphStyle(
+        'Meta',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.grey,
+        alignment=1,
+        spaceAfter=6,
+    )
+    cell_style = ParagraphStyle(
+        'Cell',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=13,
+        spaceAfter=0,
+    )
+
+    elements = []
+
+    # Título
+    title_txt = "Relatório de Transparência"
+    if base_atual:
+        title_txt += f" - {base_atual.nome}"
+    elements.append(_safe_paragraph(title_txt, title_style))
+
+    # Período
+    meses_pt = {
+        '1': 'Janeiro','2': 'Fevereiro','3': 'Março','4': 'Abril','5': 'Maio','6': 'Junho',
+        '7': 'Julho','8': 'Agosto','9': 'Setembro','10': 'Outubro','11': 'Novembro','12': 'Dezembro'
+    }
+    if data_inicio and data_fim:
+        periodo = f"Período: {data_inicio} a {data_fim}"
+    elif ano and mes and ano.isdigit() and mes.isdigit():
+        periodo = f"Período: {meses_pt.get(mes, mes)} de {ano}"
+    elif ano and ano.isdigit():
+        periodo = f"Período: Ano {ano}"
+    elif mes and mes.isdigit():
+        periodo = f"Período: {meses_pt.get(mes, mes)}"
+    else:
+        periodo = "Período: Todos os registros"
+
+    elements.append(_safe_paragraph(periodo, meta_style))
+    elements.append(_safe_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", meta_style))
+    elements.append(Spacer(1, 16))
+
+    if contas.exists():
+        # Cabeçalho
+        data_rows = [['Data', 'Título', 'Descrição']]
+
+        # Linhas
+        for c in contas:
+            d = c.data.strftime('%d/%m/%Y') if getattr(c, 'data', None) else ''
+            titulo_par = _safe_paragraph(_plain_text(getattr(c, 'titulo', '') or ''), cell_style)
+            desc_html = _sanitize_for_reportlab(getattr(c, 'descricao', '') or '')
+            desc_par = _safe_paragraph(desc_html, cell_style)
+            data_rows.append([d, titulo_par, desc_par])
+
+        # Larguras (A4 útil ≈ 523pt; ajuste fino para suas margens)
+        table = Table(
+            data_rows,
+            colWidths=[70, 170, 283],   # soma ~523
+            repeatRows=1
+        )
+
+        table.setStyle(TableStyle([
+            # cabeçalho
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e9eefc')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#1f4aa8')),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+
+            # células
+            ('VALIGN', (0, 1), (-1, -1), 'TOP'),
+            ('ALIGN',  (0, 1), (0, -1), 'CENTER'),  # data
+            ('LEFTPADDING',  (0, 1), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 1), (-1, -1), 6),
+            ('TOPPADDING',   (0, 1), (-1, -1), 6),
+            ('BOTTOMPADDING',(0, 1), (-1, -1), 6),
+
+            # grelha + zebra
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cfd6e6')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.beige]),
+        ]))
+
+        elements.append(table)
+        elements.append(Spacer(1, 12))
+        elements.append(_safe_paragraph(f"Total de registros: {contas.count()}", styles['Normal']))
+    else:
+        elements.append(_safe_paragraph("Nenhum registro encontrado para o período selecionado.", styles['Normal']))
+
+    elements.append(Spacer(1, 14))
+    footer = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, alignment=1, textColor=colors.grey)
+    elements.append(_safe_paragraph("Documento gerado automaticamente.", footer))
+
+    doc.build(elements)
+
+    filename = "relatorio_transparencia"
+    if base_atual:
+        import re as _re
+        filename += "_" + _re.sub(r'[^a-z0-9_-]+', '_', base_atual.slug.lower())
+    filename += "_" + datetime.now().strftime("%Y%m%d_%H%M") + ".pdf"
+
+    buffer.seek(0)
+    resp = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return resp
+
 
 from django.utils import timezone
 from .models import UserSecurity
