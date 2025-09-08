@@ -544,10 +544,7 @@ from io import BytesIO
 from .models import Conta 
 
 def painel_transparencia(request):
-    """
-    View principal do painel de transparência com filtros
-    """
-    # Aplicar filtro de base conforme permissões do usuário
+    
     base_atual = _resolver_base_para_request(request)
     
     if request.user.is_superuser:
@@ -564,7 +561,7 @@ def painel_transparencia(request):
     
     contas = contas.order_by('-data')
     
-    # Aplicar filtros de data
+
     mes = request.GET.get('mes')
     ano = request.GET.get('ano')
     data_inicio = request.GET.get('data_inicio')
@@ -662,7 +659,6 @@ def _safe_paragraph(text: str | None, style) -> Paragraph:
         from html import escape
         return Paragraph(escape(s), style)
 
-# -----------------------------------------------------------------------------
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -671,174 +667,15 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
 from reportlab.lib.units import inch
 from io import BytesIO
 from datetime import datetime
-
-@login_required
-def gerar_pdf(request):
-    """
-    Relatório de Transparência (Data | Título | Descrição)
-    - Respeita a base do usuário
-    - Filtros: mes, ano, data_inicio, data_fim
-    - Conteúdo sanitizado para o ReportLab
-    """
-    # ---- Filtro de base por permissão ----
-    base_atual = _resolver_base_para_request(request)
-
-    if request.user.is_superuser:
-        contas = Conta.objects.all()
-        if base_atual:
-            contas = contas.filter(base=base_atual)
-    else:
-        bases_user = _bases_do_usuario(request.user)
-        if base_atual and bases_user.filter(pk=base_atual.pk).exists():
-            contas = Conta.objects.filter(base=base_atual)
-        else:
-            contas = Conta.objects.filter(base__in=bases_user)
-
-    contas = contas.order_by('-data')
-
-    # ---- Filtros de período ----
-    mes = request.GET.get('mes')
-    ano = request.GET.get('ano')
-    data_inicio = request.GET.get('data_inicio')
-    data_fim = request.GET.get('data_fim')
-
-    if mes and mes.isdigit():
-        contas = contas.filter(data__month=int(mes))
-    if ano and ano.isdigit():
-        contas = contas.filter(data__year=int(ano))
-    if data_inicio:
-        contas = contas.filter(data__gte=data_inicio)
-    if data_fim:
-        contas = contas.filter(data__lte=data_fim)
-
-    # ---- Montagem do PDF ----
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=36, rightMargin=36, topMargin=48, bottomMargin=36
-    )
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        spaceAfter=18,
-        alignment=1,
-        textColor=colors.HexColor('#1f4aa8'),
-    )
-    meta_style = ParagraphStyle(
-        'Meta',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=colors.grey,
-        alignment=1,
-        spaceAfter=6,
-    )
-    cell_style = ParagraphStyle(
-        'Cell',
-        parent=styles['Normal'],
-        fontSize=10,
-        leading=13,
-        spaceAfter=0,
-    )
-
-    elements = []
-
-    # Título
-    title_txt = "Relatório de Transparência"
-    if base_atual:
-        title_txt += f" - {base_atual.nome}"
-    elements.append(_safe_paragraph(title_txt, title_style))
-
-    # Período
-    meses_pt = {
-        '1': 'Janeiro','2': 'Fevereiro','3': 'Março','4': 'Abril','5': 'Maio','6': 'Junho',
-        '7': 'Julho','8': 'Agosto','9': 'Setembro','10': 'Outubro','11': 'Novembro','12': 'Dezembro'
-    }
-    if data_inicio and data_fim:
-        periodo = f"Período: {data_inicio} a {data_fim}"
-    elif ano and mes and ano.isdigit() and mes.isdigit():
-        periodo = f"Período: {meses_pt.get(mes, mes)} de {ano}"
-    elif ano and ano.isdigit():
-        periodo = f"Período: Ano {ano}"
-    elif mes and mes.isdigit():
-        periodo = f"Período: {meses_pt.get(mes, mes)}"
-    else:
-        periodo = "Período: Todos os registros"
-
-    elements.append(_safe_paragraph(periodo, meta_style))
-    elements.append(_safe_paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", meta_style))
-    elements.append(Spacer(1, 16))
-
-    if contas.exists():
-        # Cabeçalho
-        data_rows = [['Data', 'Título', 'Descrição']]
-
-        # Linhas
-        for c in contas:
-            d = c.data.strftime('%d/%m/%Y') if getattr(c, 'data', None) else ''
-            titulo_par = _safe_paragraph(_plain_text(getattr(c, 'titulo', '') or ''), cell_style)
-            desc_html = _sanitize_for_reportlab(getattr(c, 'descricao', '') or '')
-            desc_par = _safe_paragraph(desc_html, cell_style)
-            data_rows.append([d, titulo_par, desc_par])
-
-        # Larguras (A4 útil ≈ 523pt; ajuste fino para suas margens)
-        table = Table(
-            data_rows,
-            colWidths=[70, 170, 283],   # soma ~523
-            repeatRows=1
-        )
-
-        table.setStyle(TableStyle([
-            # cabeçalho
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e9eefc')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#1f4aa8')),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-
-            # células
-            ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-            ('ALIGN',  (0, 1), (0, -1), 'CENTER'),  # data
-            ('LEFTPADDING',  (0, 1), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 1), (-1, -1), 6),
-            ('TOPPADDING',   (0, 1), (-1, -1), 6),
-            ('BOTTOMPADDING',(0, 1), (-1, -1), 6),
-
-            # grelha + zebra
-            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cfd6e6')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.beige]),
-        ]))
-
-        elements.append(table)
-        elements.append(Spacer(1, 12))
-        elements.append(_safe_paragraph(f"Total de registros: {contas.count()}", styles['Normal']))
-    else:
-        elements.append(_safe_paragraph("Nenhum registro encontrado para o período selecionado.", styles['Normal']))
-
-    elements.append(Spacer(1, 14))
-    footer = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, alignment=1, textColor=colors.grey)
-    elements.append(_safe_paragraph("Documento gerado automaticamente.", footer))
-
-    doc.build(elements)
-
-    filename = "relatorio_transparencia"
-    if base_atual:
-        import re as _re
-        filename += "_" + _re.sub(r'[^a-z0-9_-]+', '_', base_atual.slug.lower())
-    filename += "_" + datetime.now().strftime("%Y%m%d_%H%M") + ".pdf"
-
-    buffer.seek(0)
-    resp = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
-    return resp
-
-
+from reportlab.lib.pagesizes import A4, landscape
+from io import BytesIO
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image as RLImage, Spacer
 from django.utils import timezone
 from .models import UserSecurity
+import urllib.request
+from urllib.parse import urlparse
+
 
 @login_required
 def force_password_change(request):
@@ -862,3 +699,574 @@ def force_password_change(request):
         "bases": Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user),
     }
     return render(request, "force_password_change.html", ctx)
+
+def _logo_flowable_from_url(url: str, *, max_w=160, max_h=60, debug_out: dict | None = None):
+    """
+    Baixa a logo a partir de uma URL (S3/CloudFront pré-assinada também funciona),
+    calcula o tamanho proporcional e devolve um Flowable (RLImage).
+    """
+    if debug_out is not None:
+        debug_out.clear()
+        debug_out["source"] = "url"
+        debug_out["url"] = url[:200]  # só um pedaço para não poluir o log
+
+    # 1) baixar os bytes
+    import urllib.request
+    from io import BytesIO
+    from reportlab.platypus import Image as RLImage
+
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (PDF-Generator)"
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status != 200:
+                if debug_out is not None:
+                    debug_out["error"] = f"http-status-{resp.status}"
+                return None
+            data = resp.read()
+    except Exception as e:
+        logger.warning("Falha ao baixar logo (%s): %s", url, e)
+        if debug_out is not None:
+            debug_out["error"] = f"download:{e}"
+        return None
+
+    if debug_out is not None:
+        debug_out["bytes"] = len(data)
+
+    # 2) tentar descobrir filename/ctype (apenas para log/heurística)
+    try:
+        from urllib.parse import urlparse, parse_qs, unquote
+        parsed = urlparse(url)
+        filename = os.path.basename(parsed.path) or None
+        if parsed.query:
+            q = parse_qs(parsed.query)
+            disp = q.get("response-content-disposition", [None])[0]
+            if disp:
+                m = re.search(r'filename="?([^"]+)"?', disp, flags=re.I)
+                if m:
+                    filename = unquote(m.group(1))
+        ctype = mimetypes.guess_type(filename or "")[0] if filename else None
+    except Exception:
+        filename, ctype = None, None
+
+    # 3) medir com ImageReader (ele já lida com vários formatos; se não der,
+    #    _imagereader_from_bytes tenta converter SVG→PNG ou outros via Pillow)
+    ir = _imagereader_from_bytes(data, filename=filename, content_type=ctype)
+    if not ir:
+        if debug_out is not None:
+            debug_out["error"] = "imagereader-failed"
+        return None
+
+    try:
+        iw, ih = ir.getSize()
+    except Exception as e:
+        if debug_out is not None:
+            debug_out["error"] = f"getSize:{e}"
+        return None
+
+    # 4) calcular escala proporcional
+    scale = min(max_w / float(iw or 1), max_h / float(ih or 1), 1.0)
+    w, h = max(1.0, iw * scale), max(1.0, ih * scale)
+
+    # 5) criar RLImage; se não aceitar os bytes (ex.: SVG), converter para PNG
+    try:
+        img = RLImage(BytesIO(data), width=w, height=h)
+        img.hAlign = "CENTER"
+        if debug_out is not None:
+            debug_out.update({
+                "filename": filename, "ctype": ctype, "iw": iw, "ih": ih,
+                "w": w, "h": h, "scale": round(scale, 3), "status": "ok", "used": "raw"
+            })
+        return img
+    except Exception:
+        # fallback: converter para PNG com Pillow (ou cairosvg se for SVG)
+        try:
+            is_svg = ((filename or "").lower().endswith(".svg")) or (ctype == "image/svg+xml") or (b"<svg" in data[:400].lower())
+            bio_out = BytesIO()
+            if is_svg:
+                import cairosvg  # opcional
+                bio_out.write(cairosvg.svg2png(bytestring=data))
+                bio_out.seek(0)
+            else:
+                from PIL import Image as PILImage
+                im = PILImage.open(BytesIO(data))
+                if im.mode not in ("RGB", "L"):
+                    im = im.convert("RGB")
+                im.save(bio_out, format="PNG", optimize=True)
+                bio_out.seek(0)
+
+            img = RLImage(bio_out, width=w, height=h)
+            img.hAlign = "CENTER"
+            if debug_out is not None:
+                debug_out.update({
+                    "filename": filename, "ctype": ctype, "iw": iw, "ih": ih,
+                    "w": w, "h": h, "scale": round(scale, 3), "status": "ok", "used": "converted"
+                })
+            return img
+        except Exception as e:
+            logger.warning("Falha ao converter/criar RLImage (url): %s", e)
+            if debug_out is not None:
+                debug_out["error"] = f"rlimage:{e}"
+            return None
+
+
+def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | None = None):
+    if debug_out is not None:
+        debug_out.clear()
+        debug_out["source"] = "base"
+
+    if not base or not getattr(base, "logo", None) or not base.logo.name:
+        logger.info("Base sem logo definida")
+        if debug_out is not None:
+            debug_out["status"] = "no-logo"
+        return None
+
+    rel_key = base.logo.name
+    abs_key = _rel_to_abs_key(rel_key)
+    filename = os.path.basename(rel_key)
+    ctype = getattr(getattr(base.logo, "file", None), "content_type", None) \
+            or mimetypes.guess_type(filename)[0] or "image/png"
+
+    # 1) Tenta via URL assinada (CloudFront → S3)
+    try:
+        url = cloudfront_signed_url_with_inline(
+            rel_key, expires_in=900, filename=filename, content_type=ctype
+        ) or s3_presigned_url(
+            abs_key, expires_in=900, filename=filename, content_type=ctype, inline=True
+        )
+    except Exception as e:
+        logger.warning("Erro ao gerar URL pré-assinada p/ logo: %s", e)
+        url = None
+
+    if url:
+        if debug_out is not None:
+            debug_out["signed_url"] = url  
+            debug_out["via"] = "signed-url"
+        img = _logo_flowable_from_url(url, max_w=max_w, max_h=max_h, debug_out=debug_out)
+        if img is not None:
+            return img
+
+    try:
+        base.logo.open("rb")
+        data = base.logo.read()
+        base.logo.close()
+    except Exception as e:
+        logger.warning("Falha ao ler logo do storage: %s", e)
+        if debug_out is not None:
+            debug_out["error"] = f"storage-read:{e}"
+        return None
+
+    if debug_out is not None:
+        debug_out["via"] = "storage"
+        debug_out["bytes"] = len(data)
+
+    # Medir com ImageReader (usa seus conversores internos)
+    ir = _imagereader_from_bytes(data, filename=filename, content_type=ctype)
+    if not ir:
+        if debug_out is not None:
+            debug_out["error"] = "imagereader-failed"
+        return None
+
+    iw, ih = ir.getSize()
+    scale = min(max_w / float(iw or 1), max_h / float(ih or 1), 1.0)
+    w, h = max(1.0, iw * scale), max(1.0, ih * scale)
+
+    # Criar RLImage a partir de bytes puros; se não suportar, converter
+    from io import BytesIO
+    from reportlab.platypus import Image as RLImage
+
+    try:
+        img = RLImage(BytesIO(data), width=w, height=h)  # JPEG/PNG OK
+        img.hAlign = "CENTER"
+        if debug_out is not None:
+            debug_out.update({"filename": filename, "ctype": ctype, "iw": iw, "ih": ih,
+                              "w": w, "h": h, "scale": round(scale, 3), "status": "ok", "used": "raw"})
+        return img
+    except Exception:
+        # Se for SVG, tenta cairosvg; senão PIL → PNG
+        try:
+            is_svg = (filename or "").lower().endswith(".svg") or ctype == "image/svg+xml"
+            if is_svg:
+                import cairosvg  # pode não estar instalado
+                png = cairosvg.svg2png(bytestring=data)
+                bio = BytesIO(png)
+            else:
+                from PIL import Image as PILImage
+                im = PILImage.open(BytesIO(data))
+                if im.mode not in ("RGB", "L"):
+                    im = im.convert("RGB")
+                bio = BytesIO()
+                im.save(bio, format="PNG", optimize=True)
+                bio.seek(0)
+
+            img = RLImage(bio, width=w, height=h)
+            img.hAlign = "CENTER"
+            if debug_out is not None:
+                debug_out.update({"filename": filename, "ctype": ctype, "iw": iw, "ih": ih,
+                                  "w": w, "h": h, "scale": round(scale, 3), "status": "ok", "used": "converted"})
+            return img
+        except Exception as e:
+            logger.warning("Falha ao converter/criar RLImage (storage): %s", e)
+            if debug_out is not None:
+                debug_out["error"] = f"rlimage:{e}"
+            return None
+
+def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_type: str | None = None):
+    """Tenta criar ImageReader direto; se falhar, converte (SVG→PNG com cairosvg; outros→PNG com Pillow)."""
+    from io import BytesIO
+    from reportlab.lib.utils import ImageReader
+
+    if not raw or len(raw) == 0:
+        logger.warning("Dados da imagem estão vazios")
+        return None
+
+    # 1) Tenta criar ImageReader diretamente
+    try:
+        ir = ImageReader(BytesIO(raw))
+        ir.getSize()  # testa se consegue ler
+        logger.info("Logo carregada diretamente pelo ReportLab")
+        return ir
+    except Exception as e:
+        logger.info(f"ImageReader direto falhou: {e}, tentando conversões...")
+
+    # 2) SVG → PNG (se possível)
+    try:
+        is_svg = (
+            (filename and filename.lower().endswith(".svg"))
+            or (content_type == "image/svg+xml")
+            or (b"<svg" in raw[:400].lower())
+        )
+        if is_svg:
+            logger.info("Detectado SVG, convertendo para PNG...")
+            import cairosvg  # pip install cairosvg
+            png = cairosvg.svg2png(bytestring=raw)
+            ir = ImageReader(BytesIO(png))
+            ir.getSize()
+            logger.info("SVG convertido para PNG com sucesso")
+            return ir
+    except ImportError:
+        logger.warning("cairosvg não instalado, não é possível converter SVG")
+    except Exception as e:
+        logger.warning(f"Conversão SVG→PNG falhou: {e}")
+
+    # 3) Pillow → PNG (para outros formatos)
+    try:
+        from PIL import Image as PILImage
+        logger.info("Tentando conversão via Pillow...")
+        
+        bio = BytesIO(raw)
+        im = PILImage.open(bio)
+        
+        # Converte para RGB se necessário
+        if im.mode not in ("RGB", "L"):
+            logger.info(f"Convertendo modo {im.mode} para RGB")
+            im = im.convert("RGB")
+            
+        # Salva como PNG
+        out = BytesIO()
+        im.save(out, format="PNG", optimize=True)
+        out.seek(0)
+        
+        ir = ImageReader(out)
+        ir.getSize()
+        logger.info(f"Imagem convertida via Pillow: {im.size}")
+        return ir
+        
+    except ImportError:
+        logger.warning("Pillow não instalado, não é possível converter imagem")
+    except Exception as e:
+        logger.warning(f"Conversão via Pillow falhou: {e}")
+        
+    logger.error("Todas as tentativas de conversão de imagem falharam")
+    return None
+
+
+# Adicione estas definições de estilo ANTES da função _build_pdf_header:
+
+# Definições de cores e estilos para PDF
+BLUE_DARK   = colors.HexColor("#1f4aa8")  
+BLUE_LIGHT  = colors.HexColor("#e9eefc")
+GRID_LIGHT  = colors.HexColor("#cfd6e6")
+GREEN_OK    = colors.HexColor("#b9dfc3")  
+YELLOW_WARN = colors.HexColor("#fff3cd")  
+RED_ALERT   = colors.HexColor("#f8d7da")  
+
+# Estilos de parágrafo
+styles = getSampleStyleSheet()
+TITLE_CENTER = ParagraphStyle(
+    "TITLE_CENTER",
+    parent=styles["Heading1"],
+    alignment=1,  
+    fontSize=16,
+    textColor=BLUE_DARK,
+    spaceAfter=0,
+    spaceBefore=0,
+    leading=18,
+)
+
+META_LABEL = ParagraphStyle(
+    "META_LABEL", parent=styles["Normal"], fontSize=8, textColor=colors.black, leading=10
+)
+META_VALUE = ParagraphStyle(
+    "META_VALUE", parent=styles["Normal"], fontSize=9, textColor=colors.black, leading=10
+)
+
+def _status_background(value: str) -> colors.Color | None:
+    """Retorna cor de fundo baseada no status"""
+    if not value:
+        return None
+    v = value.strip().lower()
+    if "conclu" in v or "finaliz" in v:
+        return GREEN_OK
+    if "andament" in v or "pendente" in v:
+        return YELLOW_WARN
+    if "atras" in v or "cancel" in v:
+        return RED_ALERT
+    return None
+
+def _build_pdf_header(base_for_logo, page_width, *, titulo, meta):
+    """Constrói o cabeçalho do PDF com logo, título e metadados"""
+    
+    # Tenta carregar a logo
+    logo_flow = None
+    if base_for_logo:
+        try:
+            logo_flow = _logo_flowable_from_base(base_for_logo, max_w=170, max_h=60)
+            if logo_flow:
+                logger.info("Logo carregada com sucesso no cabeçalho")
+            else:
+                logger.info("Logo não pôde ser carregada, usando espaço vazio")
+        except Exception as e:
+            logger.warning(f"Erro ao carregar logo no cabeçalho: {e}")
+            logo_flow = None
+    
+    # Se não conseguiu carregar logo, usa um espaçador
+    if not logo_flow:
+        from reportlab.platypus import Spacer
+        logo_flow = Spacer(170, 60)
+
+    # Constrói tabela de metadados
+    meta_rows = [
+        [Paragraph("<b>CÓDIGO</b>", META_LABEL), Paragraph(meta.get("codigo","—"), META_VALUE)],
+        [Paragraph("Emissão Inicial", META_LABEL), Paragraph(meta.get("emi_ini","—"), META_VALUE)],
+        [Paragraph("Emissão Final", META_LABEL), Paragraph(meta.get("emi_fim","—"), META_VALUE)],
+        [Paragraph("<b>RESPONSÁVEL</b>", META_LABEL), Paragraph(meta.get("resp","—"), META_VALUE)],
+    ]
+    meta_tbl = Table(meta_rows, colWidths=[85, 115], hAlign="RIGHT")
+    meta_tbl.setStyle(TableStyle([
+        ("GRID", (0,0), (-1,-1), 0.5, GRID_LIGHT),
+        ("BACKGROUND", (0,0), (-1,-1), colors.whitesmoke),
+        ("ALIGN", (0,0), (0,-1), "RIGHT"),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING", (0,0), (-1,-1), 6),
+        ("RIGHTPADDING", (0,0), (-1,-1), 6),
+    ]))
+
+    # Título principal
+    title_flow = Paragraph(f"<b>{titulo}</b>", TITLE_CENTER)
+
+    # Calcula larguras das colunas
+    col_logo  = 200
+    col_meta  = 210
+    col_title = max(200, page_width - col_logo - col_meta)
+
+    # Monta tabela do cabeçalho
+    header_tbl = Table(
+        [[logo_flow, title_flow, meta_tbl]],
+        colWidths=[col_logo, col_title, col_meta],
+        rowHeights=[64],
+    )
+    header_tbl.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("LINEBELOW", (0,0), (-1,0), 1, BLUE_DARK),
+    ]))
+    
+    return header_tbl
+
+@login_required
+def gerar_pdf(request):
+    base_atual = _resolver_base_para_request(request)
+
+    if request.user.is_superuser:
+        contas = Conta.objects.all()
+        if base_atual:
+            contas = contas.filter(base=base_atual)
+    else:
+        bases_user = _bases_do_usuario(request.user)
+        if base_atual and bases_user.filter(pk=base_atual.pk).exists():
+            contas = Conta.objects.filter(base=base_atual)
+        else:
+            contas = Conta.objects.filter(base__in=bases_user)
+    contas = contas.order_by("-data")
+
+    mes = request.GET.get("mes")
+    ano = request.GET.get("ano")
+    data_inicio = request.GET.get("data_inicio")
+    data_fim = request.GET.get("data_fim")
+
+    if mes and mes.isdigit():
+        contas = contas.filter(data__month=int(mes))
+    if ano and ano.isdigit():
+        contas = contas.filter(data__year=int(ano))
+    if data_inicio:
+        contas = contas.filter(data__gte=data_inicio)
+    if data_fim:
+        contas = contas.filter(data__lte=data_fim)
+
+    base_for_logo = base_atual
+    if not base_for_logo:
+        base_ids = list(contas.values_list("base_id", flat=True).distinct()[:2])
+        if len(base_ids) == 1:
+            base_for_logo = Base.objects.filter(pk=base_ids[0]).first()
+
+    from reportlab.lib.pagesizes import A4, landscape
+    from io import BytesIO
+    buffer = BytesIO()
+    PAGE_SIZE = landscape(A4)
+    page_w, page_h = PAGE_SIZE
+    left, right, top, bottom = 36, 36, 36, 30
+    usable_w = page_w - left - right
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=PAGE_SIZE,
+        leftMargin=left, rightMargin=right, topMargin=top, bottomMargin=bottom
+    )
+
+    elements = []
+
+    meta = {
+        "codigo":  request.GET.get("codigo")  or "—",
+        "emi_ini": request.GET.get("emi_ini") or (data_inicio or "—"),
+        "emi_fim": request.GET.get("emi_fim") or (data_fim or "—"),
+        "resp":    request.GET.get("resp")    or "—",
+    }
+    titulo_header = request.GET.get("titulo") or "MARCOS E EVENTOS DOS PROJETOS"
+    elements.append(_build_pdf_header(base_for_logo, usable_w, titulo=titulo_header, meta=meta))
+    elements.append(Spacer(1, 6))
+
+    from datetime import datetime
+    meta_style = ParagraphStyle("Meta2", parent=styles["Normal"], fontSize=8, textColor=colors.grey, alignment=1)
+    meses_pt = {
+        "1":"Janeiro","2":"Fevereiro","3":"Março","4":"Abril","5":"Maio","6":"Junho",
+        "7":"Julho","8":"Agosto","9":"Setembro","10":"Outubro","11":"Novembro","12":"Dezembro"
+    }
+    if data_inicio and data_fim:
+        periodo = f"Período: {data_inicio} a {data_fim}"
+    elif ano and mes and ano.isdigit() and mes.isdigit():
+        periodo = f"Período: {meses_pt.get(mes, mes)} de {ano}"
+    elif ano and ano.isdigit():
+        periodo = f"Período: Ano {ano}"
+    elif mes and mes.isdigit():
+        periodo = f"Período: {meses_pt.get(mes, mes)}"
+    else:
+        periodo = "Período: Todos os registros"
+    elements.append(Paragraph(periodo, meta_style))
+    elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", meta_style))
+    elements.append(Spacer(1, 8))
+
+    # --- Tabela principal (sem DISC/ETAPA/RESPONSÁVEL) ---
+    if contas.exists():
+        # Estilo que quebra linhas inclusive em palavras longas/URLs
+        CELL_WRAP = ParagraphStyle(
+            "CELL_WRAP",
+            parent=styles["Normal"],
+            fontSize=9,
+            leading=12,
+            spaceAfter=0,
+            wordWrap="CJK",          # <- força quebra segura
+        )
+
+        headers = ["PROJETO", "DESCRIÇÃO", "DATA", "OBSERVAÇÃO", "STATUS"]
+        data_rows = [headers]
+        status_values = []
+
+        for c in contas:
+            projeto = _plain_text(getattr(getattr(c, "base", None), "nome", "") or "—")
+            data_fmt = c.data.strftime("%d/%m/%Y") if getattr(c, "data", None) else "—"
+
+            # usa os sanitizers p/ permitir <br/> e tags simples
+            desc_html = _sanitize_for_reportlab(getattr(c, "titulo", "") or "")
+            obs_html  = _sanitize_for_reportlab(getattr(c, "descricao", "") or "")
+
+            status_txt = getattr(c, "status", None) or "—"
+            status_values.append(status_txt)
+
+            data_rows.append([
+                _safe_paragraph(projeto,  CELL_WRAP),
+                _safe_paragraph(desc_html, CELL_WRAP),
+                _safe_paragraph(data_fmt, CELL_WRAP),
+                _safe_paragraph(obs_html,  CELL_WRAP),
+                _safe_paragraph(status_txt, CELL_WRAP),
+            ])
+
+        col_w = [
+            usable_w * 0.18,  
+            usable_w * 0.43,  # DESCRIÇÃO
+            usable_w * 0.10,  # DATA
+            usable_w * 0.23,  # OBSERVAÇÃO
+            usable_w * 0.06,  # STATUS
+        ]
+
+        tbl = Table(data_rows, colWidths=col_w, repeatRows=1)
+        tbl_style = [
+            # header
+            ("BACKGROUND", (0,0), (-1,0), BLUE_DARK),
+            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0), (-1,0), 9),
+            ('ALIGN',      (0,0), (-1,0), "CENTER"),
+            ('BOTTOMPADDING', (0,0), (-1,0), 6),
+
+            # corpo
+            ("FONTNAME", (0,1), (-1,-1), "Helvetica"),
+            ("FONTSIZE", (0,1), (-1,-1), 9),
+            ("VALIGN",   (0,1), (-1,-1), "TOP"),         # <- texto âncora no topo
+            ("GRID",     (0,0), (-1,-1), 0.25, GRID_LIGHT),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.whitesmoke, colors.beige]),
+            ("ALIGN", (2,1), (2,-1), "CENTER"),          # DATA
+            ("ALIGN", (4,1), (4,-1), "CENTER"),          # STATUS
+            ("LEFTPADDING",  (0,1), (-1,-1), 6),
+            ("RIGHTPADDING", (0,1), (-1,-1), 6),
+            ("TOPPADDING",   (0,1), (-1,-1), 5),
+            ("BOTTOMPADDING",(0,1), (-1,-1), 5),
+        ]
+
+        # Cor de fundo do STATUS por linha
+        for r, st in enumerate(status_values, start=1):  # +1 porque 0 é o header
+            bg = _status_background(st)
+            if bg:
+                tbl_style.append(("BACKGROUND", (4, r), (4, r), bg))
+                tbl_style.append(("FONTNAME",   (4, r), (4, r), "Helvetica-Bold"))
+
+        tbl.setStyle(TableStyle(tbl_style))
+        elements.append(tbl)
+        elements.append(Spacer(1, 8))
+        elements.append(Paragraph(f"Total de registros: {contas.count()}", styles["Normal"]))
+    else:
+        elements.append(Paragraph("Nenhum registro encontrado para o período selecionado.", styles["Normal"]))
+
+
+    footer = ParagraphStyle("Footer", parent=styles["Normal"], fontSize=8, alignment=1, textColor=colors.grey)
+    elements.append(Spacer(1, 10))
+    elements.append(Paragraph("Documento gerado automaticamente.", footer))
+
+    doc.build(elements)
+
+    filename = "relatorio_transparencia"
+    if base_for_logo:
+        import re as _re
+        filename += "_" + _re.sub(r"[^a-z0-9_-]+", "_", base_for_logo.slug.lower())
+    from datetime import datetime as _dt
+    filename += "_" + _dt.now().strftime("%Y%m%d_%H%M") + ".pdf"
+
+    buffer.seek(0)
+    resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+
+
+
