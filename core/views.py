@@ -12,17 +12,14 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db.models import Prefetch
-from django.utils.timezone import localdate
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.urls import reverse 
-from django.template.loader import render_to_string
 from .forms import ContaForm
 from .models import Anexo, Base, Conta
 import re, html
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from django.contrib.staticfiles.storage import staticfiles_storage
 from django.contrib.auth.forms import SetPasswordForm
 
 logger = logging.getLogger(__name__)
@@ -54,7 +51,7 @@ try:
     from botocore.signers import CloudFrontSigner
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-except Exception:  # libs ausentes em dev/local
+except Exception:  
     CloudFrontSigner = None
 
 from itertools import groupby
@@ -64,7 +61,7 @@ def _group_by_month(qs):
     grupos = []
     for key, it in groupby(itens, key=lambda c: c.data.strftime('%Y-%m')):
         contas = list(it)
-        label = contas[0].data.strftime('%m/%Y')  # ex.: 09/2025
+        label = contas[0].data.strftime('%m/%Y')  
         grupos.append({'label': label, 'contas': contas})
     return grupos
 
@@ -105,7 +102,6 @@ def _get_cf_signer():
 
 
 def _rel_to_abs_key(rel_key: str) -> str:
-    """Converte chave RELATIVA em chave ABSOLUTA aplicando Origin Path (se houver)."""
     return f"{AWS_S3_LOCATION}/{rel_key}" if AWS_S3_LOCATION else rel_key
 
 
@@ -117,7 +113,6 @@ def s3_presigned_url(
     content_type: str | None = None,
     inline: bool = True,
 ) -> str:
-    """URL pré-assinada (S3) com Content-Disposition/Type opcionais."""
     params = {"Bucket": AWS_BUCKET, "Key": abs_key}
     if inline:
         dispo = 'inline'
@@ -533,14 +528,9 @@ def base_context(request):
 
 from django.shortcuts import render
 from django.http import HttpResponse
-from django.db.models import Q
-from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.units import inch
-from datetime import datetime
-from io import BytesIO
 from .models import Conta 
 
 def painel_transparencia(request):
@@ -579,7 +569,6 @@ def painel_transparencia(request):
     if data_fim:
         contas = contas.filter(data__lte=data_fim)
     
-    # Obter bases para o contexto (para o seletor de base se for superuser)
     bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
     
     context = {
@@ -590,59 +579,45 @@ def painel_transparencia(request):
     
     return render(request, 'painel_transparencia.html', context)
 
-# --- helpers para o PDF (deixe acima da view) --------------------------------
 import re, html
 from reportlab.platypus import Paragraph
 
 _TAG_RE = re.compile(r'</?([a-zA-Z0-9]+)(?:\s[^>]*)?>')
 
 def _plain_text(s: str | None) -> str:
-    """Remove HTML e normaliza espaços/linhas para uso em Título."""
     if not s:
         return ""
     txt = html.unescape(s)
-    txt = re.sub(r'<[^>]+>', '', txt)                     # remove qualquer tag
-    txt = txt.replace('\r\n', '\n').replace('\r', '\n')   # normaliza quebras
-    txt = re.sub(r'[ \t]+', ' ', txt)                     # colapsa espaços
+    txt = re.sub(r'<[^>]+>', '', txt)                    
+    txt = txt.replace('\r\n', '\n').replace('\r', '\n') 
+    txt = re.sub(r'[ \t]+', ' ', txt)                   
     return txt.strip()
 
 def _sanitize_for_reportlab(raw: str | None) -> str:
-    """
-    Converte/limpa HTML para algo que o ReportLab entende nas células de Descrição.
-    Mantém apenas <b>, <i>, <u>, <br/>, <sup>, <sub>. Remove <table> etc.
-    """
     if not raw:
         return ""
 
     txt = html.unescape(raw)
 
-    # remove tabelas/blocos complexos
     txt = re.sub(r'<table\b.*?>.*?</table\s*>', '', txt, flags=re.I | re.S)
 
-    # normaliza quebras
     txt = txt.replace('\r\n', '\n').replace('\r', '\n')
 
-    # <p> -> <br/>
     txt = re.sub(r'</?p[^>]*>', '<br/>', txt, flags=re.I)
 
-    # strong/em -> b/i
     txt = re.sub(r'<strong[^>]*>', '<b>', txt, flags=re.I).replace('</strong>', '</b>')
     txt = re.sub(r'<em[^>]*>', '<i>', txt, flags=re.I).replace('</em>', '</i>')
 
-    # bullets/travessões que a Helvetica não tem
     txt = re.sub(r'[\u2022\u25AA\u25E6\u25CF\u25A0\u25A1]', '- ', txt)  # • ▪ ◦ ● ■ □
     txt = re.sub(r'[\u2013\u2014]', '-', txt)                            # – —
 
-    # fecha <br> "solto"
     txt = re.sub(r'<br\s*>', '<br/>', txt, flags=re.I)
 
-    # mantém somente um conjunto mínimo de tags
     ALLOWED = {'b', 'i', 'u', 'br', 'sup', 'sub'}
     def _keep(m):
         return m.group(0) if m.group(1).lower() in ALLOWED else ''
     txt = _TAG_RE.sub(_keep, txt)
 
-    # colapsa brs seguidos
     txt = re.sub(r'(?:<br/>\s*){3,}', '<br/><br/>', txt)
 
     return txt.strip()
@@ -655,26 +630,16 @@ def _safe_paragraph(text: str | None, style) -> Paragraph:
     try:
         return Paragraph(s, style)
     except Exception:
-        # se algo escapar, escapa HTML e tenta de novo
         from html import escape
         return Paragraph(escape(s), style)
 
 
-from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
-from reportlab.lib.units import inch
-from io import BytesIO
-from datetime import datetime
-from reportlab.lib.pagesizes import A4, landscape
-from io import BytesIO
-from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Image as RLImage, Spacer
+from reportlab.platypus import Image as  Spacer
 from django.utils import timezone
 from .models import UserSecurity
-import urllib.request
-from urllib.parse import urlparse
 
 
 @login_required
@@ -701,16 +666,11 @@ def force_password_change(request):
     return render(request, "force_password_change.html", ctx)
 
 def _logo_flowable_from_url(url: str, *, max_w=160, max_h=60, debug_out: dict | None = None):
-    """
-    Baixa a logo a partir de uma URL (S3/CloudFront pré-assinada também funciona),
-    calcula o tamanho proporcional e devolve um Flowable (RLImage).
-    """
     if debug_out is not None:
         debug_out.clear()
         debug_out["source"] = "url"
-        debug_out["url"] = url[:200]  # só um pedaço para não poluir o log
+        debug_out["url"] = url[:200] 
 
-    # 1) baixar os bytes
     import urllib.request
     from io import BytesIO
     from reportlab.platypus import Image as RLImage
@@ -734,7 +694,6 @@ def _logo_flowable_from_url(url: str, *, max_w=160, max_h=60, debug_out: dict | 
     if debug_out is not None:
         debug_out["bytes"] = len(data)
 
-    # 2) tentar descobrir filename/ctype (apenas para log/heurística)
     try:
         from urllib.parse import urlparse, parse_qs, unquote
         parsed = urlparse(url)
@@ -750,8 +709,6 @@ def _logo_flowable_from_url(url: str, *, max_w=160, max_h=60, debug_out: dict | 
     except Exception:
         filename, ctype = None, None
 
-    # 3) medir com ImageReader (ele já lida com vários formatos; se não der,
-    #    _imagereader_from_bytes tenta converter SVG→PNG ou outros via Pillow)
     ir = _imagereader_from_bytes(data, filename=filename, content_type=ctype)
     if not ir:
         if debug_out is not None:
@@ -765,11 +722,9 @@ def _logo_flowable_from_url(url: str, *, max_w=160, max_h=60, debug_out: dict | 
             debug_out["error"] = f"getSize:{e}"
         return None
 
-    # 4) calcular escala proporcional
     scale = min(max_w / float(iw or 1), max_h / float(ih or 1), 1.0)
     w, h = max(1.0, iw * scale), max(1.0, ih * scale)
 
-    # 5) criar RLImage; se não aceitar os bytes (ex.: SVG), converter para PNG
     try:
         img = RLImage(BytesIO(data), width=w, height=h)
         img.hAlign = "CENTER"
@@ -780,12 +735,11 @@ def _logo_flowable_from_url(url: str, *, max_w=160, max_h=60, debug_out: dict | 
             })
         return img
     except Exception:
-        # fallback: converter para PNG com Pillow (ou cairosvg se for SVG)
         try:
             is_svg = ((filename or "").lower().endswith(".svg")) or (ctype == "image/svg+xml") or (b"<svg" in data[:400].lower())
             bio_out = BytesIO()
             if is_svg:
-                import cairosvg  # opcional
+                import cairosvg  
                 bio_out.write(cairosvg.svg2png(bytestring=data))
                 bio_out.seek(0)
             else:
@@ -828,7 +782,6 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
     ctype = getattr(getattr(base.logo, "file", None), "content_type", None) \
             or mimetypes.guess_type(filename)[0] or "image/png"
 
-    # 1) Tenta via URL assinada (CloudFront → S3)
     try:
         url = cloudfront_signed_url_with_inline(
             rel_key, expires_in=900, filename=filename, content_type=ctype
@@ -861,7 +814,6 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
         debug_out["via"] = "storage"
         debug_out["bytes"] = len(data)
 
-    # Medir com ImageReader (usa seus conversores internos)
     ir = _imagereader_from_bytes(data, filename=filename, content_type=ctype)
     if not ir:
         if debug_out is not None:
@@ -872,23 +824,21 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
     scale = min(max_w / float(iw or 1), max_h / float(ih or 1), 1.0)
     w, h = max(1.0, iw * scale), max(1.0, ih * scale)
 
-    # Criar RLImage a partir de bytes puros; se não suportar, converter
     from io import BytesIO
     from reportlab.platypus import Image as RLImage
 
     try:
-        img = RLImage(BytesIO(data), width=w, height=h)  # JPEG/PNG OK
+        img = RLImage(BytesIO(data), width=w, height=h)  
         img.hAlign = "CENTER"
         if debug_out is not None:
             debug_out.update({"filename": filename, "ctype": ctype, "iw": iw, "ih": ih,
                               "w": w, "h": h, "scale": round(scale, 3), "status": "ok", "used": "raw"})
         return img
     except Exception:
-        # Se for SVG, tenta cairosvg; senão PIL → PNG
         try:
             is_svg = (filename or "").lower().endswith(".svg") or ctype == "image/svg+xml"
             if is_svg:
-                import cairosvg  # pode não estar instalado
+                import cairosvg  
                 png = cairosvg.svg2png(bytestring=data)
                 bio = BytesIO(png)
             else:
@@ -921,16 +871,14 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
         logger.warning("Dados da imagem estão vazios")
         return None
 
-    # 1) Tenta criar ImageReader diretamente
     try:
         ir = ImageReader(BytesIO(raw))
-        ir.getSize()  # testa se consegue ler
+        ir.getSize()  
         logger.info("Logo carregada diretamente pelo ReportLab")
         return ir
     except Exception as e:
         logger.info(f"ImageReader direto falhou: {e}, tentando conversões...")
 
-    # 2) SVG → PNG (se possível)
     try:
         is_svg = (
             (filename and filename.lower().endswith(".svg"))
@@ -950,7 +898,6 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
     except Exception as e:
         logger.warning(f"Conversão SVG→PNG falhou: {e}")
 
-    # 3) Pillow → PNG (para outros formatos)
     try:
         from PIL import Image as PILImage
         logger.info("Tentando conversão via Pillow...")
@@ -958,12 +905,10 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
         bio = BytesIO(raw)
         im = PILImage.open(bio)
         
-        # Converte para RGB se necessário
         if im.mode not in ("RGB", "L"):
             logger.info(f"Convertendo modo {im.mode} para RGB")
             im = im.convert("RGB")
             
-        # Salva como PNG
         out = BytesIO()
         im.save(out, format="PNG", optimize=True)
         out.seek(0)
@@ -982,9 +927,7 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
     return None
 
 
-# Adicione estas definições de estilo ANTES da função _build_pdf_header:
 
-# Definições de cores e estilos para PDF
 BLUE_DARK   = colors.HexColor("#1f4aa8")  
 BLUE_LIGHT  = colors.HexColor("#e9eefc")
 GRID_LIGHT  = colors.HexColor("#cfd6e6")
@@ -992,7 +935,6 @@ GREEN_OK    = colors.HexColor("#b9dfc3")
 YELLOW_WARN = colors.HexColor("#fff3cd")  
 RED_ALERT   = colors.HexColor("#f8d7da")  
 
-# Estilos de parágrafo
 styles = getSampleStyleSheet()
 TITLE_CENTER = ParagraphStyle(
     "TITLE_CENTER",
@@ -1026,9 +968,7 @@ def _status_background(value: str) -> colors.Color | None:
     return None
 
 def _build_pdf_header(base_for_logo, page_width, *, titulo, meta):
-    """Constrói o cabeçalho do PDF com logo, título e metadados"""
     
-    # Tenta carregar a logo
     logo_flow = None
     if base_for_logo:
         try:
@@ -1041,12 +981,10 @@ def _build_pdf_header(base_for_logo, page_width, *, titulo, meta):
             logger.warning(f"Erro ao carregar logo no cabeçalho: {e}")
             logo_flow = None
     
-    # Se não conseguiu carregar logo, usa um espaçador
     if not logo_flow:
         from reportlab.platypus import Spacer
         logo_flow = Spacer(170, 60)
 
-    # Constrói tabela de metadados
     meta_rows = [
         [Paragraph("<b>CÓDIGO</b>", META_LABEL), Paragraph(meta.get("codigo","—"), META_VALUE)],
         [Paragraph("Emissão Inicial", META_LABEL), Paragraph(meta.get("emi_ini","—"), META_VALUE)],
@@ -1065,15 +1003,12 @@ def _build_pdf_header(base_for_logo, page_width, *, titulo, meta):
         ("RIGHTPADDING", (0,0), (-1,-1), 6),
     ]))
 
-    # Título principal
     title_flow = Paragraph(f"<b>{titulo}</b>", TITLE_CENTER)
 
-    # Calcula larguras das colunas
     col_logo  = 200
     col_meta  = 210
     col_title = max(200, page_width - col_logo - col_meta)
 
-    # Monta tabela do cabeçalho
     header_tbl = Table(
         [[logo_flow, title_flow, meta_tbl]],
         colWidths=[col_logo, col_title, col_meta],
@@ -1168,16 +1103,14 @@ def gerar_pdf(request):
     elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", meta_style))
     elements.append(Spacer(1, 8))
 
-    # --- Tabela principal (sem DISC/ETAPA/RESPONSÁVEL) ---
     if contas.exists():
-        # Estilo que quebra linhas inclusive em palavras longas/URLs
         CELL_WRAP = ParagraphStyle(
             "CELL_WRAP",
             parent=styles["Normal"],
             fontSize=9,
             leading=12,
             spaceAfter=0,
-            wordWrap="CJK",          # <- força quebra segura
+            wordWrap="CJK",          
         )
 
         headers = ["PROJETO", "DESCRIÇÃO", "DATA", "OBSERVAÇÃO", "STATUS"]
@@ -1188,7 +1121,6 @@ def gerar_pdf(request):
             projeto = _plain_text(getattr(getattr(c, "base", None), "nome", "") or "—")
             data_fmt = c.data.strftime("%d/%m/%Y") if getattr(c, "data", None) else "—"
 
-            # usa os sanitizers p/ permitir <br/> e tags simples
             desc_html = _sanitize_for_reportlab(getattr(c, "titulo", "") or "")
             obs_html  = _sanitize_for_reportlab(getattr(c, "descricao", "") or "")
 
@@ -1205,38 +1137,34 @@ def gerar_pdf(request):
 
         col_w = [
             usable_w * 0.18,  
-            usable_w * 0.43,  # DESCRIÇÃO
-            usable_w * 0.10,  # DATA
-            usable_w * 0.23,  # OBSERVAÇÃO
-            usable_w * 0.06,  # STATUS
+            usable_w * 0.43,  
+            usable_w * 0.10,  
+            usable_w * 0.23,  
+            usable_w * 0.06,  
         ]
 
         tbl = Table(data_rows, colWidths=col_w, repeatRows=1)
         tbl_style = [
-            # header
             ("BACKGROUND", (0,0), (-1,0), BLUE_DARK),
             ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
             ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
             ("FONTSIZE",   (0,0), (-1,0), 9),
             ('ALIGN',      (0,0), (-1,0), "CENTER"),
             ('BOTTOMPADDING', (0,0), (-1,0), 6),
-
-            # corpo
             ("FONTNAME", (0,1), (-1,-1), "Helvetica"),
             ("FONTSIZE", (0,1), (-1,-1), 9),
-            ("VALIGN",   (0,1), (-1,-1), "TOP"),         # <- texto âncora no topo
+            ("VALIGN",   (0,1), (-1,-1), "TOP"),        
             ("GRID",     (0,0), (-1,-1), 0.25, GRID_LIGHT),
             ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.whitesmoke, colors.beige]),
-            ("ALIGN", (2,1), (2,-1), "CENTER"),          # DATA
-            ("ALIGN", (4,1), (4,-1), "CENTER"),          # STATUS
+            ("ALIGN", (2,1), (2,-1), "CENTER"),         
+            ("ALIGN", (4,1), (4,-1), "CENTER"),         
             ("LEFTPADDING",  (0,1), (-1,-1), 6),
             ("RIGHTPADDING", (0,1), (-1,-1), 6),
             ("TOPPADDING",   (0,1), (-1,-1), 5),
             ("BOTTOMPADDING",(0,1), (-1,-1), 5),
         ]
 
-        # Cor de fundo do STATUS por linha
-        for r, st in enumerate(status_values, start=1):  # +1 porque 0 é o header
+        for r, st in enumerate(status_values, start=1):  
             bg = _status_background(st)
             if bg:
                 tbl_style.append(("BACKGROUND", (4, r), (4, r), bg))
