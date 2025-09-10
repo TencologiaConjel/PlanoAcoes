@@ -994,10 +994,10 @@ TITLE_CENTER = ParagraphStyle(
 )
 
 META_LABEL = ParagraphStyle(
-    "META_LABEL", parent=styles["Normal"], fontSize=8, textColor=colors.black, leading=10
+    "META_LABEL", parent=styles["Normal"], fontSize=7, textColor=colors.black, leading=10
 )
 META_VALUE = ParagraphStyle(
-    "META_VALUE", parent=styles["Normal"], fontSize=9, textColor=colors.black, leading=10
+    "META_VALUE", parent=styles["Normal"], fontSize=8, textColor=colors.black, leading=10
 )
 
 def _status_background(value: str) -> colors.Color | None:
@@ -1063,7 +1063,6 @@ def _build_pdf_header(base_for_logo, page_width, *, titulo, meta):
 
     return KeepTogether([header_tbl, hr])
 
-
 @login_required
 def gerar_pdf(request):
     base_atual = _resolver_base_para_request(request)
@@ -1116,11 +1115,91 @@ def gerar_pdf(request):
 
     elements = []
 
+    def _determinar_datas_emissao(contas_queryset, data_inicio_param, data_fim_param, mes_param, ano_param):
+        def _formatar_data_br(data_str):
+            if not data_str or data_str == "—":
+                return data_str
+            try:
+                if "/" in data_str and len(data_str.split("/")) == 3:
+                    partes = data_str.split("/")
+                    if len(partes[0]) == 4:  
+                        return f"{partes[2]}/{partes[1]}/{partes[0]}"
+                    else:  
+                        return data_str
+                elif "-" in data_str:
+                    from datetime import datetime
+                    data_obj = datetime.strptime(data_str, "%Y-%m-%d")
+                    return data_obj.strftime("%d/%m/%Y")
+                else:
+                    return data_str
+            except:
+                return data_str
+
+        if data_inicio_param and data_fim_param:
+            return _formatar_data_br(data_inicio_param), _formatar_data_br(data_fim_param)
+        
+        if data_inicio_param and not data_fim_param:
+            
+            ultima_conta = contas_queryset.first()  
+            data_fim_calculada = ultima_conta.data.strftime("%d/%m/%Y") if ultima_conta else _formatar_data_br(data_inicio_param)
+            return _formatar_data_br(data_inicio_param), data_fim_calculada
+        
+        if data_fim_param and not data_inicio_param:
+            primeira_conta = contas_queryset.last() 
+            data_inicio_calculada = primeira_conta.data.strftime("%d/%m/%Y") if primeira_conta else _formatar_data_br(data_fim_param)
+            return data_inicio_calculada, _formatar_data_br(data_fim_param)
+        
+        if mes_param and ano_param and mes_param.isdigit() and ano_param.isdigit():
+            from datetime import datetime
+            import calendar
+            
+            mes_int = int(mes_param)
+            ano_int = int(ano_param)
+            
+            data_inicio_calculada = f"01/{mes_int:02d}/{ano_int}"
+            
+            ultimo_dia = calendar.monthrange(ano_int, mes_int)[1]
+            data_fim_calculada = f"{ultimo_dia:02d}/{mes_int:02d}/{ano_int}"
+            
+            return data_inicio_calculada, data_fim_calculada
+        
+        if ano_param and ano_param.isdigit():
+            ano_int = int(ano_param)
+            return f"01/01/{ano_int}", f"31/12/{ano_int}"
+        
+        if mes_param and mes_param.isdigit():
+            from datetime import datetime
+            import calendar
+            
+            mes_int = int(mes_param)
+            ano_atual = datetime.now().year
+            
+            data_inicio_calculada = f"01/{mes_int:02d}/{ano_atual}"
+            ultimo_dia = calendar.monthrange(ano_atual, mes_int)[1]
+            data_fim_calculada = f"{ultimo_dia:02d}/{mes_int:02d}/{ano_atual}"
+            
+            return data_inicio_calculada, data_fim_calculada
+        
+        if contas_queryset.exists():
+            primeira_conta = contas_queryset.last()  
+            ultima_conta = contas_queryset.first()  
+            
+            data_inicio_calculada = primeira_conta.data.strftime("%d/%m/%Y") if primeira_conta else "—"
+            data_fim_calculada = ultima_conta.data.strftime("%d/%m/%Y") if ultima_conta else "—"
+            
+            return data_inicio_calculada, data_fim_calculada
+        
+        return "—", "—"
+
+    emi_ini, emi_fim = _determinar_datas_emissao(contas, data_inicio, data_fim, mes, ano)
+
+    responsavel = getattr(request.user, 'nome', None) or request.user.username or "—"
+
     meta = {
         "codigo":  request.GET.get("codigo")  or "—",
-        "emi_ini": request.GET.get("emi_ini") or (data_inicio or "—"),
-        "emi_fim": request.GET.get("emi_fim") or (data_fim or "—"),
-        "resp":    request.GET.get("resp")    or "—",
+        "emi_ini": request.GET.get("emi_ini") or emi_ini,
+        "emi_fim": request.GET.get("emi_fim") or emi_fim,
+        "resp":    request.GET.get("resp")    or responsavel,
     }
     titulo_header = request.GET.get("titulo") or "MARCOS E EVENTOS DOS PROJETOS"
     elements.append(_build_pdf_header(base_for_logo, usable_w, titulo=titulo_header, meta=meta))
@@ -1132,31 +1211,19 @@ def gerar_pdf(request):
         "1":"Janeiro","2":"Fevereiro","3":"Março","4":"Abril","5":"Maio","6":"Junho",
         "7":"Julho","8":"Agosto","9":"Setembro","10":"Outubro","11":"Novembro","12":"Dezembro"
     }
-    if data_inicio and data_fim:
-        periodo = f"Período: {data_inicio} a {data_fim}"
-    elif ano and mes and ano.isdigit() and mes.isdigit():
-        periodo = f"Período: {meses_pt.get(mes, mes)} de {ano}"
-    elif ano and ano.isdigit():
-        periodo = f"Período: Ano {ano}"
-    elif mes and mes.isdigit():
-        periodo = f"Período: {meses_pt.get(mes, mes)}"
-    else:
-        periodo = "Período: Todos os registros"
-    elements.append(Paragraph(periodo, meta_style))
-    elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", meta_style))
+    elements.append(Paragraph(f"Dia: {datetime.now().strftime('%d/%m/%Y')} | Horas: {datetime.now().strftime('%H:%M:%S')}", meta_style))
     elements.append(Spacer(1, 8))
 
     if contas.exists():
         CELL_WRAP = ParagraphStyle(
             "CELL_WRAP",
             parent=styles["Normal"],
-            fontSize=9,
+            fontSize=8,
             leading=12,
             spaceAfter=0,
             wordWrap="CJK",
         )
 
-        # >>>>>> cabeçalhos atualizados
         headers = ["PROJETO", "TÍTULO", "DATA", "DESCRIÇÃO", "STATUS"]
         data_rows = [headers]
         status_values = []
@@ -1173,46 +1240,42 @@ def gerar_pdf(request):
 
             data_rows.append([
                 _safe_paragraph(projeto,     CELL_WRAP),
-                _safe_paragraph(titulo_html, CELL_WRAP),  # título na 2ª coluna
+                _safe_paragraph(titulo_html, CELL_WRAP),  
                 _safe_paragraph(data_fmt,    CELL_WRAP),
-                _safe_paragraph(desc_html,   CELL_WRAP),  # descrição (maior) na 4ª
+                _safe_paragraph(desc_html,   CELL_WRAP),  
                 _safe_paragraph(status_txt,  CELL_WRAP),
             ])
-
-        # >>>>>> larguras ajustadas (título menor, descrição maior)
+        
         col_w = [
-            usable_w * 0.18,  # PROJETO
-            usable_w * 0.32,  # TÍTULO  (menor)
-            usable_w * 0.10,  # DATA
-            usable_w * 0.34,  # DESCRIÇÃO (maior)
-            usable_w * 0.06,  # STATUS
+            usable_w * 0.18,  
+            usable_w * 0.32,  
+            usable_w * 0.10,  
+            usable_w * 0.34,  
+            usable_w * 0.06,  
         ]
 
         tbl = Table(data_rows, colWidths=col_w, repeatRows=1)
         tbl_style = [
-            # header
+            
             ("BACKGROUND", (0,0), (-1,0), BLUE_DARK),
             ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
             ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
             ("FONTSIZE",   (0,0), (-1,0), 9),
             ("ALIGN",      (0,0), (-1,0), "CENTER"),
             ("BOTTOMPADDING", (0,0), (-1,0), 6),
-
-            # corpo
             ("FONTNAME", (0,1), (-1,-1), "Helvetica"),
             ("FONTSIZE", (0,1), (-1,-1), 9),
             ("VALIGN",   (0,1), (-1,-1), "TOP"),
             ("GRID",     (0,0), (-1,-1), 0.25, GRID_LIGHT),
             ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.whitesmoke, colors.beige]),
-            ("ALIGN", (2,1), (2,-1), "CENTER"),  # DATA
-            ("ALIGN", (4,1), (4,-1), "CENTER"),  # STATUS
+            ("ALIGN", (2,1), (2,-1), "CENTER"),  
+            ("ALIGN", (4,1), (4,-1), "CENTER"),  
             ("LEFTPADDING",  (0,1), (-1,-1), 6),
             ("RIGHTPADDING", (0,1), (-1,-1), 6),
             ("TOPPADDING",   (0,1), (-1,-1), 5),
             ("BOTTOMPADDING",(0,1), (-1,-1), 5),
         ]
 
-        # destaque no STATUS
         for r, st in enumerate(status_values, start=1):
             bg = _status_background(st)
             if bg:

@@ -518,11 +518,10 @@
                             <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px;">
                                 <input type="checkbox" name="conta_selecionada" value="${conta.id}">
                                 <div>
-                                    <strong>${conta.titulo}</strong><br>
                                     <small style="color: #666;">
-                                        📅 ${conta.data} | 
-                                        🏢 ${conta.base_nome || 'N/A'} |
-                                        ${conta.valor ? `💰 R$ ${conta.valor}` : ''}
+                                         ${conta.data} | 
+                                         ${conta.base_nome || 'N/A'} |
+                                        ${conta.valor ? `R$ ${conta.valor}` : ''}
                                         ${conta.anexos_count > 0 ? `📎 ${conta.anexos_count} anexo(s)` : ''}
                                     </small>
                                     ${conta.descricao ? `<br><small>${conta.descricao}</small>` : ''}

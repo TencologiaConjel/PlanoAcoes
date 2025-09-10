@@ -118,7 +118,6 @@ AWS_SECRET_ACCESS_KEY    = config("AWS_SECRET_ACCESS_KEY")
 AWS_STORAGE_BUCKET_NAME  = config("AWS_STORAGE_BUCKET_NAME", default="webserviceconjel")
 AWS_S3_REGION_NAME       = config("AWS_S3_REGION_NAME",  default="us-east-2")
 
-# Informe APENAS o host do CloudFront (sem https)
 AWS_CLOUDFRONT_DOMAIN    = config("AWS_CLOUDFRONT_DOMAIN", default="dXXXX.cloudfront.net")
 AWS_S3_CUSTOM_DOMAIN     = AWS_CLOUDFRONT_DOMAIN.replace("https://", "").replace("http://", "")
 
