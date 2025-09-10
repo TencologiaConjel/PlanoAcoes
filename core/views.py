@@ -54,7 +54,7 @@ try:
     from botocore.signers import CloudFrontSigner
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-except Exception:  # libs ausentes em dev/local
+except Exception:  
     CloudFrontSigner = None
 
 from itertools import groupby
@@ -105,7 +105,6 @@ def _get_cf_signer():
 
 
 def _rel_to_abs_key(rel_key: str) -> str:
-    """Converte chave RELATIVA em chave ABSOLUTA aplicando Origin Path (se houver)."""
     return f"{AWS_S3_LOCATION}/{rel_key}" if AWS_S3_LOCATION else rel_key
 
 
@@ -117,7 +116,6 @@ def s3_presigned_url(
     content_type: str | None = None,
     inline: bool = True,
 ) -> str:
-    """URL pré-assinada (S3) com Content-Disposition/Type opcionais."""
     params = {"Bucket": AWS_BUCKET, "Key": abs_key}
     if inline:
         dispo = 'inline'
@@ -579,7 +577,6 @@ def painel_transparencia(request):
     if data_fim:
         contas = contas.filter(data__lte=data_fim)
     
-    # Obter bases para o contexto (para o seletor de base se for superuser)
     bases = Base.objects.all() if request.user.is_superuser else _bases_do_usuario(request.user)
     
     context = {
@@ -590,65 +587,49 @@ def painel_transparencia(request):
     
     return render(request, 'painel_transparencia.html', context)
 
-# --- helpers para o PDF (deixe acima da view) --------------------------------
 import re, html
 from reportlab.platypus import Paragraph
 
 _TAG_RE = re.compile(r'</?([a-zA-Z0-9]+)(?:\s[^>]*)?>')
 
 def _plain_text(s: str | None) -> str:
-    """Remove HTML e normaliza espaços/linhas para uso em Título."""
     if not s:
         return ""
     txt = html.unescape(s)
-    txt = re.sub(r'<[^>]+>', '', txt)                     # remove qualquer tag
-    txt = txt.replace('\r\n', '\n').replace('\r', '\n')   # normaliza quebras
-    txt = re.sub(r'[ \t]+', ' ', txt)                     # colapsa espaços
+    txt = re.sub(r'<[^>]+>', '', txt)                     
+    txt = txt.replace('\r\n', '\n').replace('\r', '\n')   
+    txt = re.sub(r'[ \t]+', ' ', txt)                     
     return txt.strip()
 
 def _sanitize_for_reportlab(raw: str | None) -> str:
-    """
-    Converte/limpa HTML para algo que o ReportLab entende nas células de Descrição.
-    Mantém apenas <b>, <i>, <u>, <br/>, <sup>, <sub>. Remove <table> etc.
-    """
     if not raw:
         return ""
 
     txt = html.unescape(raw)
 
-    # remove tabelas/blocos complexos
     txt = re.sub(r'<table\b.*?>.*?</table\s*>', '', txt, flags=re.I | re.S)
 
-    # normaliza quebras
     txt = txt.replace('\r\n', '\n').replace('\r', '\n')
 
-    # <p> -> <br/>
     txt = re.sub(r'</?p[^>]*>', '<br/>', txt, flags=re.I)
 
-    # strong/em -> b/i
     txt = re.sub(r'<strong[^>]*>', '<b>', txt, flags=re.I).replace('</strong>', '</b>')
     txt = re.sub(r'<em[^>]*>', '<i>', txt, flags=re.I).replace('</em>', '</i>')
 
-    # bullets/travessões que a Helvetica não tem
     txt = re.sub(r'[\u2022\u25AA\u25E6\u25CF\u25A0\u25A1]', '- ', txt)  # • ▪ ◦ ● ■ □
     txt = re.sub(r'[\u2013\u2014]', '-', txt)                            # – —
 
-    # fecha <br> "solto"
     txt = re.sub(r'<br\s*>', '<br/>', txt, flags=re.I)
 
-    # mantém somente um conjunto mínimo de tags
     ALLOWED = {'b', 'i', 'u', 'br', 'sup', 'sub'}
     def _keep(m):
         return m.group(0) if m.group(1).lower() in ALLOWED else ''
     txt = _TAG_RE.sub(_keep, txt)
-
-    # colapsa brs seguidos
     txt = re.sub(r'(?:<br/>\s*){3,}', '<br/><br/>', txt)
 
     return txt.strip()
 
 def _safe_paragraph(text: str | None, style) -> Paragraph:
-    """Garante Paragraph sempre com string (nunca None) e com fallback seguro."""
     s = text if isinstance(text, str) else ("" if text is None else str(text))
     if not s:
         s = ""
@@ -815,7 +796,6 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
     ctype = getattr(getattr(base.logo, "file", None), "content_type", None) \
             or mimetypes.guess_type(filename)[0] or "image/png"
 
-    # 1) Tenta via URL assinada (CloudFront → S3)
     try:
         url = cloudfront_signed_url_with_inline(
             rel_key, expires_in=900, filename=filename, content_type=ctype
@@ -828,13 +808,12 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
 
     if url:
         if debug_out is not None:
-            debug_out["signed_url"] = url  # será mascarado no header, se você quiser
+            debug_out["signed_url"] = url  
             debug_out["via"] = "signed-url"
         img = _logo_flowable_from_url(url, max_w=max_w, max_h=max_h, debug_out=debug_out)
         if img is not None:
             return img
 
-    # 2) Fallback: ler bytes direto do storage
     try:
         base.logo.open("rb")
         data = base.logo.read()
@@ -849,7 +828,6 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
         debug_out["via"] = "storage"
         debug_out["bytes"] = len(data)
 
-    # Medir com ImageReader (usa seus conversores internos)
     ir = _imagereader_from_bytes(data, filename=filename, content_type=ctype)
     if not ir:
         if debug_out is not None:
@@ -860,23 +838,21 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
     scale = min(max_w / float(iw or 1), max_h / float(ih or 1), 1.0)
     w, h = max(1.0, iw * scale), max(1.0, ih * scale)
 
-    # Criar RLImage a partir de bytes puros; se não suportar, converter
     from io import BytesIO
     from reportlab.platypus import Image as RLImage
 
     try:
-        img = RLImage(BytesIO(data), width=w, height=h)  # JPEG/PNG OK
+        img = RLImage(BytesIO(data), width=w, height=h)  
         img.hAlign = "CENTER"
         if debug_out is not None:
             debug_out.update({"filename": filename, "ctype": ctype, "iw": iw, "ih": ih,
                               "w": w, "h": h, "scale": round(scale, 3), "status": "ok", "used": "raw"})
         return img
     except Exception:
-        # Se for SVG, tenta cairosvg; senão PIL → PNG
         try:
             is_svg = (filename or "").lower().endswith(".svg") or ctype == "image/svg+xml"
             if is_svg:
-                import cairosvg  # pode não estar instalado
+                import cairosvg
                 png = cairosvg.svg2png(bytestring=data)
                 bio = BytesIO(png)
             else:
@@ -901,7 +877,6 @@ def _logo_flowable_from_base(base, *, max_w=160, max_h=60, debug_out: dict | Non
             return None
 
 def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_type: str | None = None):
-    """Tenta criar ImageReader direto; se falhar, converte (SVG→PNG com cairosvg; outros→PNG com Pillow)."""
     from io import BytesIO
     from reportlab.lib.utils import ImageReader
 
@@ -909,16 +884,14 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
         logger.warning("Dados da imagem estão vazios")
         return None
 
-    # 1) Tenta criar ImageReader diretamente
     try:
         ir = ImageReader(BytesIO(raw))
-        ir.getSize()  # testa se consegue ler
+        ir.getSize()  
         logger.info("Logo carregada diretamente pelo ReportLab")
         return ir
     except Exception as e:
         logger.info(f"ImageReader direto falhou: {e}, tentando conversões...")
 
-    # 2) SVG → PNG (se possível)
     try:
         is_svg = (
             (filename and filename.lower().endswith(".svg"))
@@ -927,7 +900,7 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
         )
         if is_svg:
             logger.info("Detectado SVG, convertendo para PNG...")
-            import cairosvg  # pip install cairosvg
+            import cairosvg 
             png = cairosvg.svg2png(bytestring=raw)
             ir = ImageReader(BytesIO(png))
             ir.getSize()
@@ -938,7 +911,6 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
     except Exception as e:
         logger.warning(f"Conversão SVG→PNG falhou: {e}")
 
-    # 3) Pillow → PNG (para outros formatos)
     try:
         from PIL import Image as PILImage
         logger.info("Tentando conversão via Pillow...")
@@ -946,12 +918,10 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
         bio = BytesIO(raw)
         im = PILImage.open(bio)
         
-        # Converte para RGB se necessário
         if im.mode not in ("RGB", "L"):
             logger.info(f"Convertendo modo {im.mode} para RGB")
             im = im.convert("RGB")
             
-        # Salva como PNG
         out = BytesIO()
         im.save(out, format="PNG", optimize=True)
         out.seek(0)
@@ -970,9 +940,6 @@ def _imagereader_from_bytes(raw: bytes, *, filename: str | None = None, content_
     return None
 
 
-# Adicione estas definições de estilo ANTES da função _build_pdf_header:
-
-# Definições de cores e estilos para PDF
 BLUE_DARK   = colors.HexColor("#1f4aa8")  
 BLUE_LIGHT  = colors.HexColor("#e9eefc")
 GRID_LIGHT  = colors.HexColor("#cfd6e6")
@@ -980,7 +947,6 @@ GREEN_OK    = colors.HexColor("#b9dfc3")
 YELLOW_WARN = colors.HexColor("#fff3cd")  
 RED_ALERT   = colors.HexColor("#f8d7da")  
 
-# Estilos de parágrafo
 styles = getSampleStyleSheet()
 TITLE_CENTER = ParagraphStyle(
     "TITLE_CENTER",
@@ -1001,7 +967,6 @@ META_VALUE = ParagraphStyle(
 )
 
 def _status_background(value: str) -> colors.Color | None:
-    """Retorna cor de fundo baseada no status"""
     if not value:
         return None
     v = value.strip().lower()
