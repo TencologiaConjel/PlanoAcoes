@@ -1,29 +1,40 @@
 from __future__ import annotations
+
 import base64
 import logging
 import mimetypes
 import os
-from urllib.parse import urlencode
+import re
+import html
+import urllib.request
+from urllib.parse import urlencode, urlparse
+from io import BytesIO
+from datetime import datetime
 import boto3
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, get_user_model, login, update_session_auth_hash
+from django.contrib.auth import (authenticate,get_user_model,login,update_session_auth_hash,)
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import SetPasswordForm
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db.models import Prefetch
-from django.utils.timezone import localdate
+from django.db.models import Prefetch, Q
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
-from django.urls import reverse 
 from django.template.loader import render_to_string
-from .forms import ContaForm
-from .models import Anexo, Base, Conta
-import re, html
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.timezone import localdate
 from django.contrib.staticfiles.storage import staticfiles_storage
-from django.contrib.auth.forms import SetPasswordForm
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import (SimpleDocTemplate,Table,TableStyle,Paragraph,Spacer,Image as RLImage,)
+from .forms import ContaForm
+from .models import Anexo, Base, Conta, UserSecurity
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +75,7 @@ def _group_by_month(qs):
     grupos = []
     for key, it in groupby(itens, key=lambda c: c.data.strftime('%Y-%m')):
         contas = list(it)
-        label = contas[0].data.strftime('%m/%Y')  # ex.: 09/2025
+        label = contas[0].data.strftime('%m/%Y')  
         grupos.append({'label': label, 'contas': contas})
     return grupos
 
@@ -529,18 +540,8 @@ def base_context(request):
             context['logo_url'] = static('img/logo-default.png')
     return context
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.db.models import Q
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.units import inch
-from datetime import datetime
-from io import BytesIO
-from .models import Conta 
 
+@login_required
 def painel_transparencia(request):
     
     base_atual = _resolver_base_para_request(request)
@@ -640,20 +641,8 @@ def _safe_paragraph(text: str | None, style) -> Paragraph:
         return Paragraph(escape(s), style)
 
 
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
-from reportlab.lib.units import inch
-from datetime import datetime
-from reportlab.lib.pagesizes import A4, landscape
-from io import BytesIO
-from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Image as RLImage, Spacer
-from django.utils import timezone
-from .models import UserSecurity
-import urllib.request
-from urllib.parse import urlparse
+
+
 
 
 @login_required
